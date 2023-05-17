@@ -53,9 +53,6 @@ async def send_data():
             ]}
         }
     )
-    request.matchId = "testId"
-    request.move.init('tiles', 1) 
-    request.move.tiles[0].from_dict({'value': ord('A'), 'pos': {'row': 4, 'col': 9}})
     response_promise = request.send()
     response = await response_promise.a_wait()
     print(f"Received sucess = {response.success}")
