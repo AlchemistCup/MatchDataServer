@@ -73,7 +73,7 @@ class BoardClient(Client):
         super().__init__()
 
     async def register(self):
-        match_id = (await self._match_server.register(getnode(), {'board': TestImpl()}).a_wait()).matchId
+        match_id = (await self._match_server.register(getnode(), {'board': self.BoardImpl(self)}).a_wait()).matchId
         if match_id:
             self._match_id = match_id
             print(f"Registration complete, assigned match_id {match_id}")
@@ -107,22 +107,22 @@ class BoardClient(Client):
             print(f"Getting full board state")
             return "Test"
         
-class TestImpl(game_capture_capnp.Board.Server):
-    def __init__(self):
-        self._match_id = ""
+# class TestImpl(game_capture_capnp.Board.Server):
+#     def __init__(self):
+#         self._match_id = ""
 
-    def assignMatch(self, matchId, **kwargs):
-            print(f"Assigned to match {matchId}")
-            self._match_id = matchId
-            return True
+#     def assignMatch(self, matchId, **kwargs):
+#             print(f"Assigned to match {matchId}")
+#             self._match_id = matchId
+#             return True
         
-    def confirmMove(self, move, **kwargs):     
-        print(f"Confirming move {move}")
-        return True
+#     def confirmMove(self, move, **kwargs):     
+#         print(f"Confirming move {move}")
+#         return True
     
-    def getFullBoardState(self, **kwargs):
-        print(f"Getting full board state")
-        return "Test"
+#     def getFullBoardState(self, **kwargs):
+#         print(f"Getting full board state")
+#         return "Test"
     
 # class RackClient(Client):
 #     def __init__(self):
