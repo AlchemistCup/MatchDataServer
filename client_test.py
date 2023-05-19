@@ -32,7 +32,7 @@ async def send_data():
 
     print("Testing pulse()")
     mac_addr = uuid.getnode()
-    response_promise = match_server.pulse(macAddr=mac_addr)
+    response_promise = match_server.pulse(macAddr=mac_addr, sensorType='board')
     response = await response_promise.a_wait()
     print(f"Received match_id = {response.matchId}")
 

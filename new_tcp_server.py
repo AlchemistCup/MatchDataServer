@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import logging
 import capnp
 import game_capture_capnp
@@ -11,15 +12,16 @@ class TCPServer:
     def __init__(self, loop):
         self._loop = loop
         self._logger = get_logger(__class__.__name__)
+        self._available_sensors = []
 
     async def handle(self, reader, writer):
         # Log connection
         self._logger.info(f"New connection from {writer.get_extra_info('peername')}")
         md.n_of_requests += 1
         self._logger.info(f"Processed {md.n_of_requests} total requests")
-        server = CapnProtoServer(self._logger)
+        server = CapnProtoServer(self)
         await server.serve(reader, writer)
-        self._logger.inf(f"{writer.get_extra_info('peername')} disconnected")
+        self._logger.info(f"{writer.get_extra_info('peername')} disconnected")
 
     async def start(self):
         server = await asyncio.start_server(self.handle, host=None, port=9189)
@@ -27,45 +29,59 @@ class TCPServer:
         self._logger.info(f"TCP server listnening on port {addr[1]}")
         await server.serve_forever()
 
-class MatchServerImpl(game_capture_capnp.MatchServer.Server):
-    def __init__(self, logger: logging.Logger):
-        self._logger = logger
-        self._sensor = None # Will need to pass this up later
-
-    def register(self, macAddr, sensorInterface, **kwargs):
-        match sensorInterface.which():
-            case 'board':
-                self._sensor = sensorInterface.board
-                self._logger.info(f"Received registration request from board ({macAddr})")
-            case 'rack':
-                self._sensor = sensorInterface.rack
-                self._logger.info(f"Received registration request from rack ({macAddr})")
-
-        return "TestMatchId"
-    
-
-    def pulse(self, **kwargs):
-        self._logger.info(f"Received pluse")
-
-    def sendMove(self, matchId: str, move, **kwargs):
-        def formatTile(tile):
-            return f"Tile '{chr(tile.value)}' @ {Pos(tile.pos.row, tile.pos.col)}" 
+    async def assign_match(self, match_id: str):
+        if len(self._available_sensors) == 0:
+            self._logger.info("No available sensors, unable to assign match")
+            return False
         
-        move_str = ', '.join(formatTile(tile) for tile in move.tiles)
-        self._logger.info(f"[{matchId}] Received move {move_str}")
+        sensor = self._available_sensors[-1]
+        #self._available_sensors.pop()
+        self._logger.info("Assigning matchId to sensor")
+        res = asyncio.run(sensor.assignMatch(match_id).a_wait()).success
+        self._logger.info(f"Obtained matchId assignment response {res}")
+        return res
 
-        return True
+    class MatchServerImpl(game_capture_capnp.MatchServer.Server):
+        def __init__(self, server):
+            self._server = server
+            self._logger: logging.Logger = server._logger
 
-    def sendRack(self, matchId: str, player, tiles, **kwargs):
-        self._logger.info(f"[{matchId}] Received rack {tiles} for player {player}")
+        def register(self, macAddr, sensorInterface, **kwargs):
+            match sensorInterface.which():
+                case 'board':
+                    self._logger.info(f"sensorInterface {sensorInterface.board}")
+                    self._server._available_sensors.append(sensorInterface.board)
+                    self._logger.info(f"Received registration request from board ({macAddr})")
+                case 'rack':
+                    self._server._available_sensors.append(sensorInterface.rack)
+                    self._logger.info(f"Received registration request from rack ({macAddr})")
 
-        return True
+            return ""
+        
+
+        def pulse(self, **kwargs):
+            self._logger.info(f"Received pluse")
+
+        def sendMove(self, matchId: str, move, **kwargs):
+            def formatTile(tile):
+                return f"Tile '{chr(tile.value)}' @ {Pos(tile.pos.row, tile.pos.col)}" 
+            
+            move_str = ', '.join(formatTile(tile) for tile in move.tiles)
+            self._logger.info(f"[{matchId}] Received move {move_str}")
+
+            return True
+
+        def sendRack(self, matchId: str, player, tiles, **kwargs):
+            self._logger.info(f"[{matchId}] Received rack {tiles} for player {player}")
+
+            return True
 
 class CapnProtoServer:
-    def __init__(self, logger: logging.Logger):
-        self._logger = logger
+    def __init__(self, tcp_server: TCPServer):
+        self._server = tcp_server
+        self._logger: logging.Logger = self._server._logger
 
-    async def myreader(self):
+    async def socketreader(self):
         while self._retry:
             try:
                 # Must be a wait_for so we don't block on read()
@@ -83,7 +99,7 @@ class CapnProtoServer:
         self._logger.debug("myreader done.")
         return True
 
-    async def mywriter(self):
+    async def socketwriter(self):
         while self._retry:
             try:
                 # Must be a wait_for so we don't block on read()
@@ -103,13 +119,13 @@ class CapnProtoServer:
     
     async def serve(self, reader, writer):
         # Start TwoPartyServer using TwoWayPipe (only requires bootstrap)
-        self._server = capnp.TwoPartyServer(bootstrap=MatchServerImpl(self._logger))
+        self._server = capnp.TwoPartyServer(bootstrap=TCPServer.MatchServerImpl(self._server))
         self._reader = reader
         self._writer = writer
         self._retry = True
 
         # Assemble reader and writer tasks, run in the background
-        coroutines = [self.myreader(), self.mywriter()]
+        coroutines = [self.socketreader(), self.socketwriter()]
         tasks = asyncio.gather(*coroutines, return_exceptions=True)
 
         while True:
@@ -123,8 +139,19 @@ class CapnProtoServer:
         # Make wait for reader/writer to finish (prevent possible resource leaks)
         await tasks
 
-if __name__ == "__main__":
+async def test_assign_match(server: TCPServer):
+    success = False
+    while not success:
+        success = await server.assign_match("Testing assign match")
+        await asyncio.sleep(5)
+
+async def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     tcp_server = TCPServer(loop)
-    asyncio.run(tcp_server.start())
+    coroutines = [tcp_server.start(), test_assign_match(tcp_server)]
+    tasks = asyncio.gather(*coroutines, return_exceptions=True)
+    await tasks
+
+if __name__ == "__main__":
+    asyncio.run(main())
