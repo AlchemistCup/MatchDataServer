@@ -71,9 +71,10 @@ class Client:
 class BoardClient(Client):
     def __init__(self):
         super().__init__()
+        self._board_interface = self.BoardImpl(self)
 
     async def register(self):
-        match_id = (await self._match_server.register(getnode(), {'board': self.BoardImpl(self)}).a_wait()).matchId
+        match_id = (await self._match_server.register(getnode(), self._board_interface).a_wait()).matchId
         if match_id:
             self._match_id = match_id
             print(f"Registration complete, assigned match_id {match_id}")
@@ -90,7 +91,7 @@ class BoardClient(Client):
 
         return (await self._match_server.sendMove(self._match_id, to_dict(move)).a_wait()).success
     
-    class BoardImpl(game_capture_capnp.Board.Server):
+    class BoardImpl(game_capture_capnp.MatchServer.Board.Server):
         def __init__(self, board_client):
             self._board = board_client
         

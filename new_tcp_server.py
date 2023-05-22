@@ -3,6 +3,7 @@ import socket
 import logging
 import capnp
 import game_capture_capnp
+import gc
 from scrabble.board_pos import Pos
 
 from logger import get_logger
@@ -35,10 +36,9 @@ class TCPServer:
             return False
         
         sensor = self._available_sensors[-1]
-        #self._available_sensors.pop()
-        self._logger.info("Assigning matchId to sensor")
-        res = asyncio.run(sensor.assignMatch(match_id).a_wait()).success
-        self._logger.info(f"Obtained matchId assignment response {res}")
+        self._logger.debug(f"Assigning matchId to sensor {sensor.schema}")
+        res = await sensor.assignMatch(match_id).a_wait()
+        self._logger.debug(f"Obtained matchId assignment response {res}")
         return res
 
     class MatchServerImpl(game_capture_capnp.MatchServer.Server):
@@ -49,7 +49,6 @@ class TCPServer:
         def register(self, macAddr, sensorInterface, **kwargs):
             match sensorInterface.which():
                 case 'board':
-                    self._logger.info(f"sensorInterface {sensorInterface.board}")
                     self._server._available_sensors.append(sensorInterface.board)
                     self._logger.info(f"Received registration request from board ({macAddr})")
                 case 'rack':
@@ -78,8 +77,8 @@ class TCPServer:
 
 class CapnProtoServer:
     def __init__(self, tcp_server: TCPServer):
-        self._server = tcp_server
-        self._logger: logging.Logger = self._server._logger
+        self._tcp_server = tcp_server
+        self._logger: logging.Logger = self._tcp_server._logger
 
     async def socketreader(self):
         while self._retry:
@@ -87,7 +86,7 @@ class CapnProtoServer:
                 # Must be a wait_for so we don't block on read()
                 data = await asyncio.wait_for(
                     self._reader.read(4096),
-                    timeout=0.1
+                    timeout=5.0
                 )
             except asyncio.TimeoutError:
                 self._logger.debug("myreader timeout.")
@@ -105,7 +104,7 @@ class CapnProtoServer:
                 # Must be a wait_for so we don't block on read()
                 data = await asyncio.wait_for(
                     self._server.read(4096),
-                    timeout=0.1
+                    timeout=5.0
                 )
                 self._writer.write(data.tobytes())
             except asyncio.TimeoutError:
@@ -119,7 +118,7 @@ class CapnProtoServer:
     
     async def serve(self, reader, writer):
         # Start TwoPartyServer using TwoWayPipe (only requires bootstrap)
-        self._server = capnp.TwoPartyServer(bootstrap=TCPServer.MatchServerImpl(self._server))
+        self._server = capnp.TwoPartyServer(bootstrap=TCPServer.MatchServerImpl(self._tcp_server))
         self._reader = reader
         self._writer = writer
         self._retry = True
