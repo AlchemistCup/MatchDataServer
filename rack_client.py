@@ -18,7 +18,7 @@ def parse_args():
 async def main(loop):
     mac = parse_args().mac
     client = FakeRackClient(loop, mac)
-    await client.connect()
+    await client.connect(addr='localhost')
 
 class FakeRackClient(Client):
     def __init__(self, loop: asyncio.AbstractEventLoop, mac: int):
@@ -54,9 +54,9 @@ class FakeRackClient(Client):
 
     async def send_rack(self, tiles):
         assert self._is_connected
-        self._logger.debug("Sending move to server")
-        res = (await self._data_feed.sendRack(self._match_id, self._player, tiles).a_wait()).success
-        self._logger.debug(f"Obtained response {res} for sendMove")
+        self._logger.info(f"Sending rack {tiles} to server")
+        res = (await self._data_feed.sendRack(tiles).a_wait()).success
+        self._logger.info(f"Obtained response {res} for sendMove")
         return res
 
 class RackImpl(game_capture_capnp.Rack.Server):
@@ -65,10 +65,9 @@ class RackImpl(game_capture_capnp.Rack.Server):
         self._client = client
         self._logger = self._client._logger
 
-    def assignMatch(self, matchId, player, **kwargs):
-        self._logger.info(f"Assigned to match {matchId} for player {player}")
-        self._client._match_id = matchId
-        self._client._player = player
+    def assignMatch(self, dataFeed, **kwargs):
+        self._logger.info(f"Assigned to match")
+        self._client._data_feed = dataFeed
         return True
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ from matchdata import GameStateStore
 
 import capnp
 import game_capture_capnp
-from scrabble.board_pos import Pos
+from scrabble.src.board_pos import Pos
 
 """
 Notes:
@@ -165,7 +165,7 @@ class SocketHandler:
             self._capnp_server.poll_once()
             # Check to see if reader has been sent an eof (disconnect)
             if self._reader.at_eof():
-                self._logger.debug(f"{self._peername} disconnected by peer")
+                self._logger.info(f"{self._peername} disconnected by peer")
                 self._retry = False
             await asyncio.sleep(0.01)
 
@@ -200,7 +200,7 @@ class SocketHandler:
 
             # TODO: Update this to await once using new capnp version
             data_feed = self._socket_handler._connection_handler.register_sensor(self._socket_handler)
-            self._logger.info(f'Responding to registration request from {hex(macAddr)} with {data_feed}')
+            self._logger.info(f'Responding to registration request from {hex(macAddr)} with {data_feed.schema}')
             return data_feed
         
         def pulse(self, **kwargs):
@@ -252,10 +252,12 @@ class MatchSensors:
 
     def reconnect_sensor(self, role: SensorRole, sensor: SocketHandler):
         old = self._sensors[role]
+        print(f"Old socket status {old.is_connected}, {old.mac_address}")
         if old.is_connected or old.mac_address != sensor.mac_address:
             return False
         
         self._sensors[role] = sensor
+        return True
 
     @property
     def board(self):
@@ -280,7 +282,7 @@ class ConnectionHandler():
         mac_addr = server.mac_address
         if mac_addr in self._assigned_sensors:
             match_id, role = self._assigned_sensors[mac_addr]
-            if not are_compatible(server.sensor_type):
+            if not are_compatible(server.sensor_type, role):
                 self._logger.error(f'Received registration request from {hex(mac_addr)} with sensor type clash, previously {role}, now {server.sensor_type}, disconnecting')
                 assert False, "Currently unable to disconnect client as method cannot be asynchronous"
                 #await server.disconnect_client()
@@ -318,25 +320,23 @@ class ConnectionHandler():
             p1_socket = self._select_available_sensor(SensorType.rack)
             p2_socket = self._select_available_sensor(SensorType.rack)
             
-            test = await board_socket.sensor.assignMatch(BoardFeed(board_socket.sensor, match_id)).a_wait()
-            self._logger.info(f"[{match_id}] obtained assignMatch response {test}")
             match_assign_coroutines = [
-                board_socket.sensor.assignMatch(BoardFeed(board_socket.sensor, match_id)).a_wait(),
-                p1_socket.sensor.assignMatch(RackFeed(p1_socket.sensor, match_id, SensorRole.player1)).a_wait(),
-                p2_socket.sensor.assignMatch(RackFeed(p2_socket.sensor, match_id, SensorRole.player2)).a_wait()
+                board_socket.sensor.assignMatch(BoardFeed(match_id)).a_wait(),
+                p1_socket.sensor.assignMatch(RackFeed(match_id, SensorRole.player1)).a_wait(),
+                p2_socket.sensor.assignMatch(RackFeed(match_id, SensorRole.player2)).a_wait()
             ]
-            self._logger.info(f"[{match_id}] Sending match assignment requests to sensors")
+            self._logger.debug(f"[{match_id}] Sending match assignment requests to sensors")
             results = await asyncio.gather(*match_assign_coroutines)
-            results = [res.success for res in results]
             self._logger.debug(f"[{match_id}] Obtained assignment responses {results}")
             assigned_sensors = all(results) and all([sensor.is_connected for sensor in [board_socket, p1_socket, p2_socket]])
 
         GameStateStore().create_new_match(match_id, self)
 
-        self._assigned_sensors(board_socket.mac_address, (match_id, SensorRole.board))
-        self._assigned_sensors(p1_socket.mac_address, (match_id, SensorRole.player1))
-        self._assigned_sensors(p2_socket.mac_address, (match_id, SensorRole.player2))
+        self._assigned_sensors[board_socket.mac_address] = (match_id, SensorRole.board)
+        self._assigned_sensors[p1_socket.mac_address] = (match_id, SensorRole.player1)
+        self._assigned_sensors[p2_socket.mac_address] = (match_id, SensorRole.player2)
         self._active_matches[match_id] = MatchSensors(board_socket, p1_socket, p2_socket)
+        self._logger.info(f"[{match_id}] Successfully assigned sensors")
         
         return True
     

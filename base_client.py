@@ -85,7 +85,7 @@ class Client:
                 self._logger.debug("Pulsing server")
                 await asyncio.wait_for(
                     self._server.pulse().a_wait(),
-                    timeout=1.0
+                    timeout=5.0
                 )
                 self._logger.debug("Server connection ok.")
                 await asyncio.sleep(2)

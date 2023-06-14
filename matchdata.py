@@ -10,7 +10,7 @@ test = 1
 
 class GameStateStore(metaclass=Singleton):
     def __init__(self):
-        self._game_state_mapping: Dict[str, GameState]
+        self._game_state_mapping: Dict[str, GameState] = {}
 
     def create_new_match(self, match_id, connection_handler):
         assert match_id not in self._game_state_mapping, f"Cannot start new match with match_id={match_id}, this id is already taken"

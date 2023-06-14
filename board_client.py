@@ -18,7 +18,7 @@ def parse_args():
 async def main(loop):
     mac = parse_args().mac
     client = FakeBoardClient(loop, mac)
-    await client.connect()
+    await client.connect(addr='localhost')
 
 class FakeBoardClient(Client):
     def __init__(self, loop: asyncio.AbstractEventLoop, mac: int):
@@ -66,9 +66,9 @@ class FakeBoardClient(Client):
 
     async def send_move(self, move):
         assert self._is_connected
-        self._logger.debug("Sending move to server")
-        res = (await self._data_feed.sendMove(self._match_id, move).a_wait()).success
-        self._logger.debug(f"Obtained response {res} for sendMove")
+        self._logger.info("Sending move to server")
+        res = (await self._data_feed.sendMove(move).a_wait()).success
+        self._logger.info(f"Obtained response {res} for sendMove")
         return res
 
 class BoardImpl(game_capture_capnp.Board.Server):
