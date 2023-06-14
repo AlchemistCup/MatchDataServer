@@ -200,6 +200,11 @@ class Client:
             self._logger.debug(f"Ending task {index}")
             await task
 
+        self._logger.debug("Closing connection")
+        self._writer.close()
+        await self._writer.wait_closed()
+        self._logger.debug("Closed connection")
+
         # Cleanup state
         self._reader = None
         self._writer = None
