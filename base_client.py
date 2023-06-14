@@ -140,7 +140,7 @@ class Client:
         await self.on_connect(self._server)
 
         # Spin here until connection is broken
-        while self._is_connected:
+        while self._is_connected: # Do we update this correctly?
             await asyncio.sleep(1)
 
         await self.disconnect(retry_connection=True)

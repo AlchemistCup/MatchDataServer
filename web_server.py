@@ -2,9 +2,10 @@ import asyncio
 import aiohttp
 from aiohttp import web
 import logging
+from typing import Dict, Any
 
 from logger import get_logger
-import matchdata
+import matchdata as md
 
 logging.getLogger(aiohttp.__name__).setLevel(logging.WARN) # Disable info logging from aiohttp
 
@@ -21,8 +22,8 @@ class HTTPServer:
         @routes.get('/setup')
         async def setup_match(request: web.Request):
             self._logger.debug(f"Received match setup request with player1 = {request.query.get('p1')} and player2 = {request.query.get('p2')}")
-            matchdata.n_of_requests += 1
-            self._logger.info(f"Processed {matchdata.n_of_requests} total requests")
+            md.n_of_requests += 1
+            self._logger.info(f"Processed {md.n_of_requests} total requests")
             #response = web.json_response({'error': 'Insufficient boards'})
             response = web.json_response({
                 "body": {
@@ -37,7 +38,7 @@ class HTTPServer:
             response = web.json_response({
                 "body": {
                     "score": 15,
-                    "blanks": 1
+                    "blanks": 0
                 }
             })
             return response
@@ -55,18 +56,22 @@ class HTTPServer:
         @routes.get('/challenge')
         async def challenge(request: web.Request):
             self._logger.debug(f"Received challenge request {request.query}")
-            response = web.json_response({
-                "body": {
-                    "successful": False,
-                    "penalty": 0
-                }
+            words = request.query.getall('words', [])
+            if not words:
+                return HTTPServer._error("No challenge words provided")
+
+            response = HTTPServer._success({
+                "successful": any(not md.Dictionary().is_valid(word) for word in words),
+                "challenger_penalty": len(words) * 5,
+                "undone_move_score": 15
             })
+            
             return response
         
         @routes.post('/blanks')
         async def update_blank_tiles(request: web.Request):
             self._logger.debug(f"Received blank tile update {request.query}, has body = {request.can_read_body}")
-            body = await request.text()
+            body = await request.json()
             self._logger.debug(f"Request body = {body}")
             response = web.json_response({
                 "body": {}
@@ -82,6 +87,18 @@ class HTTPServer:
         await site.start()
         self._logger.info(f"HTTP server listening on port {site._port}")
         await asyncio.Event().wait()
+
+    @staticmethod
+    def _error(msg: str) :
+        return web.json_response({
+            "error": msg
+        })
+
+    @staticmethod
+    def _success(response: Dict[str, Any]):
+        return web.json_response({
+            "body": response
+        })
 
 
 if __name__ == '__main__':
