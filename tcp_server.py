@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from logger import get_logger
 from util import Singleton
@@ -64,28 +64,36 @@ class TCPServer():
     async def assign_match(self, match_id: str):
         return await self._connection_handler.assign_match(match_id)
     
-    async def confirm_move(self, move):
+    async def confirm_move(self, match_id, move):
         # Currently just being used to test RPC functionality
-        if len(self._available_sensors) == 0:
-            self._logger.info("No available sensors, unable to confirm move")
+        sensors = self._connection_handler.get_match_sensors(match_id)
+        if sensors is None:
+            self._logger.error(f"[{match_id}] Match has no assigned sensors")
+            return False
+        elif not sensors.board.is_connected:
+            self._logger.error(f"[{match_id}] board sensor is not connected")
             return False
         
-        sensor = self._available_sensors[-1]
-        self._logger.debug(f"Sending confirmMove to sensor {sensor.schema}")
-        res = (await sensor.confirmMove(move).a_wait()).success
-        self._logger.debug(f"Obtained confirmMove response {res}")
+        board = sensors.board.sensor
+        self._logger.debug(f"[{match_id}] Sending confirmMove to board")
+        res = (await board.confirmMove(move).a_wait()).success
+        self._logger.debug(f"[{match_id}] Obtained confirmMove response {res}")
         return res
     
-    async def get_full_board_state(self):
+    async def get_full_board_state(self, match_id):
         # Currently just being used to test RPC functionality
-        if len(self._available_sensors) == 0:
-            self._logger.info("No available sensors, unable to confirm move")
+        sensors = self._connection_handler.get_match_sensors(match_id)
+        if sensors is None:
+            self._logger.error(f"[{match_id}] Match has no assigned sensors")
+            return False
+        elif not sensors.board.is_connected:
+            self._logger.error(f"[{match_id}] board sensor is not connected")
             return False
         
-        sensor = self._available_sensors[-1]
-        self._logger.debug(f"Sending getFullBoardState to sensor {sensor.schema}")
-        res = (await sensor.getFullBoardState().a_wait()).boardState
-        self._logger.debug(f"Obtained getFullBoardState response {res}")
+        board = sensors.board.sensor
+        self._logger.debug(f"[{match_id}] Sending getFullBoardState to board")
+        res = (await board.getFullBoardState().a_wait()).boardState
+        self._logger.debug(f"[{match_id}] Obtained getFullBoardState response {res}")
         return res
 
 class SocketHandler:
@@ -200,11 +208,11 @@ class SocketHandler:
 
             # TODO: Update this to await once using new capnp version
             data_feed = self._socket_handler._connection_handler.register_sensor(self._socket_handler)
-            self._logger.info(f'Responding to registration request from {hex(macAddr)} with {data_feed.schema}')
+            self._logger.info(f'Responding to registration request from {hex(macAddr)} with {data_feed}')
             return data_feed
         
         def pulse(self, **kwargs):
-            self._logger.debug(f"Received pluse")
+            self._logger.debug2(f"Received pluse")
 
 
 def make_data_feed(match_id, role: SensorRole):
@@ -284,17 +292,18 @@ class ConnectionHandler():
             match_id, role = self._assigned_sensors[mac_addr]
             if not are_compatible(server.sensor_type, role):
                 self._logger.error(f'Received registration request from {hex(mac_addr)} with sensor type clash, previously {role}, now {server.sensor_type}, disconnecting')
-                assert False, "Currently unable to disconnect client as method cannot be asynchronous"
+                assert False, "Currently unable to disconnect client as method cannot be asynchronous (fix with new capnproto version)"
                 #await server.disconnect_client()
             else:
                 if self._active_matches[match_id].reconnect_sensor(role, server):
                     return make_data_feed(match_id, role)
                 else:
                     self._logger.error(f'Unable to reconnect sensor {hex(mac_addr)} to match {match_id}, either due to sensor role mismatch or old socket was not cleaned up properly')
+                    assert False, "Currently unable to disconnect client as method cannot be asynchronous (fix with new capnproto version)"
         else:
             if mac_addr in self._available_sensors[server.sensor_type]:
                 self._logger.error(f'Received duplicate registration request from {hex(mac_addr)}, disconnecting')
-                assert False, "Currently unable to disconnect client as method cannot be asynchronous"
+                assert False, "Currently unable to disconnect client as method cannot be asynchronous (fix with new capnproto version)"
             else:
                 self._logger.info(f"Registered {server.sensor_type} ({hex(mac_addr)})")
                 self._available_sensors[server.sensor_type][mac_addr] = server
@@ -309,11 +318,11 @@ class ConnectionHandler():
     
         while not assigned_sensors:
             if len(self._available_sensors[SensorType.board]) < 1:
-                self._logger.info("Insufficient available boards, unable to assign match")
+                self._logger.error(f"[{match_id}] Insufficient available boards, unable to assign match")
                 return False
             
             if len(self._available_sensors[SensorType.rack]) < 2:
-                self._logger.info("Insufficient available racks, unable to assign match")
+                self._logger.error(f"[{match_id}] Insufficient available racks, unable to assign match")
                 return False
             
             board_socket = self._select_available_sensor(SensorType.board)
@@ -325,8 +334,18 @@ class ConnectionHandler():
                 p1_socket.sensor.assignMatch(RackFeed(match_id, SensorRole.player1)).a_wait(),
                 p2_socket.sensor.assignMatch(RackFeed(match_id, SensorRole.player2)).a_wait()
             ]
-            self._logger.debug(f"[{match_id}] Sending match assignment requests to sensors")
-            results = await asyncio.gather(*match_assign_coroutines)
+
+            self._logger.debug(f"[{match_id}] Sending match assignment requests to sensors: {SensorRole.board} {board_socket.mac_address}, {SensorRole.player1} {p1_socket.mac_address}, {SensorRole.player2} {p2_socket.mac_address}")
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*match_assign_coroutines),
+                    timeout=1.5
+                )
+            except asyncio.TimeoutError:
+                self._logger.debug(f"[{match_id}] Did not receive match assignment reply from all sensors")
+                return False
+            
+            results = [res.success for res in results]
             self._logger.debug(f"[{match_id}] Obtained assignment responses {results}")
             assigned_sensors = all(results) and all([sensor.is_connected for sensor in [board_socket, p1_socket, p2_socket]])
 
@@ -355,14 +374,18 @@ class ConnectionHandler():
         else:
             self._logger.warning(f"Removing unmanaged socket from ConnectionHandler type={sensor_type}, mac={mac_addr}")
         
+    def get_match_sensors(self, match_id) -> Optional[MatchSensors]:        
+        return self._active_matches.get(match_id)
+
     def _select_available_sensor(self, sensor_type: SensorType):
         _, sensor = self._available_sensors[sensor_type].popitem()
         return sensor
 
 async def test_client_rpc(server: TCPServer):
-    await test_assign_match(server)
+    match_id = "ExampleID"
+    await test_assign_match(server, match_id)
     while True:
-        await server.confirm_move({'tiles': [
+        await server.confirm_move(match_id, {'tiles': [
                 {
                     'value': ord('A'),
                     'pos': {'row': 4, 'col': 9}
@@ -374,15 +397,15 @@ async def test_client_rpc(server: TCPServer):
             ]
         })
         await asyncio.sleep(5)
-        await server.get_full_board_state()
+        await server.get_full_board_state(match_id)
         await asyncio.sleep(5)
 
-async def test_assign_match(server: TCPServer):
+async def test_assign_match(server: TCPServer, match_id):
     logger = get_logger('TEST')
     success = False
     while not success:
         logger.info("Testing assign match")
-        success = await server.assign_match("ExampleID")
+        success = await server.assign_match(match_id)
         await asyncio.sleep(5)
 
 async def main(loop):

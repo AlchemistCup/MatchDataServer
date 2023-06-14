@@ -82,17 +82,17 @@ class Client:
         '''
         while self._retry_task:
             try:
-                self._logger.debug("Pulsing server")
+                self._logger.debug2("Pulsing server")
                 await asyncio.wait_for(
                     self._server.pulse().a_wait(),
                     timeout=5.0
                 )
-                self._logger.debug("Server connection ok.")
+                self._logger.debug2("Server connection ok.")
                 await asyncio.sleep(2)
             except asyncio.TimeoutError:
                 self._logger.warning("Server connection failed, disconnecting.")
                 # End other tasks
-                self._is_connected = False
+                self._retry_task = False
                 return False
             except Exception as err:
                 self._logger.error("Unknown socketwatcher err: %s", err)
@@ -114,6 +114,7 @@ class Client:
                 timeout=1.0
             )
             self._is_connected = True
+            self._reconnection_attempts = 5
         except (asyncio.TimeoutError, OSError):
             self._logger.debug(f"Retrying port connection {self._addr}:{self._port}")
             self._reconnection_attempts -= 1
@@ -138,11 +139,14 @@ class Client:
         self._tasks.append(asyncio.gather(*watcher, return_exceptions=True))
 
         # Callback
-        await self.on_connect(self._server)
-        self._logger.info("Returned from on_connect")
+        if not await self.on_connect(self._server):
+            await self.disconnect(retry_connection=True)
+            return
+        
+        self._logger.debug("Returned from on_connect")
 
         # Spin here until connection is broken
-        while self._is_connected: # Do we update this correctly?
+        while self._retry_task:
             await asyncio.sleep(1)
 
         await self.disconnect(retry_connection=True)
@@ -208,6 +212,23 @@ class Client:
             self._reconnection_attempts -= 1
             return
         self._logger.debug("Stopping client.")
+
+    async def handle_request(self, request, timeout=5.0):
+        """
+        Used to prevent RPC requests from stalling when not receiving a response from the server
+        """
+        try:
+            res = await asyncio.wait_for(
+                request.a_wait(),
+                timeout=timeout
+            )
+            return res
+        except asyncio.TimeoutError:
+            return None
+        
+    def add_task(self, task):
+        self._logger.debug(f"Backgrounding {task.__name__}")
+        self._tasks.append(asyncio.gather(task(), return_exceptions=True))
 
     async def on_connect(self, server):
         '''

@@ -42,10 +42,10 @@ def get_logger(name) -> logging.Logger:
         return loggers.get(name)
     
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)-s] [%(name)-5s] %(message)s')
     ch.setFormatter(formatter)

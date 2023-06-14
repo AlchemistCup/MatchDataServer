@@ -31,7 +31,12 @@ class FakeBoardClient(Client):
     async def on_connect(self, server):
         client = BoardImpl(self)
         self._logger.info(f"Registering with server (MAC: {hex(self._mac)})")
-        data_feed = (await server.register(self._mac, {'board': client}).a_wait()).dataFeed
+        data_feed = (await self.handle_request(server.register(self._mac, {'board': client}), timeout=2.0)).dataFeed
+
+        if data_feed is None:
+            self._logger.error('Did not receive registration response')
+            return False
+        
         match data_feed.which():
             case 'board':
                 self._logger.info(f"Registered successfully, reassigned to match")
@@ -42,26 +47,29 @@ class FakeBoardClient(Client):
             case 'none':
                 self._logger.info(f"Registered successfully, not assigned to match")
 
-        # For testing
-        while self._is_connected:
-            await asyncio.sleep(5)
-            if self._data_feed is not None:
-                await self.send_move(
-                    {'tiles': [
-                            {
-                                'value': ord('A'),
-                                'pos': {'row': 4, 'col': 9}
-                            },
-                            {
-                                'value': ord('?'),
-                                'pos': {'row': 4, 'col': 10}
-                            }
-                        ]
-                    }
-                )
+        async def test_send_move():
+            while self._retry_task:
+                await asyncio.sleep(10)
+                if self._data_feed is not None:
+                    await self.send_move(
+                        {'tiles': [
+                                {
+                                    'value': ord('A'),
+                                    'pos': {'row': 4, 'col': 9}
+                                },
+                                {
+                                    'value': ord('?'),
+                                    'pos': {'row': 4, 'col': 10}
+                                }
+                            ]
+                        }
+                    )
+        
+        self.add_task(test_send_move)
+        return True
 
     async def on_disconnect(self):
-        self._logger.debug("on_disconnect called - currently unimplemented")
+        self._logger.debug("Resetting data feed")
         self._data_feed = None
 
     async def send_move(self, move):
