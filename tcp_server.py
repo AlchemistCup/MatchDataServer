@@ -49,10 +49,11 @@ class TCPServer():
     async def handle(self, reader, writer):
         # Log connection
         self._logger.info(f"New connection from {writer.get_extra_info('peername')}")
-        server = SocketHandler(self._connection_handler, reader, writer)
-        await server.serve()
+        socket = SocketHandler(self._connection_handler, reader, writer)
+        await socket.serve()
         self._logger.info(f"{writer.get_extra_info('peername')} disconnected")
         # Handle disconnection here
+        self._connection_handler.on_disconnect(socket)
 
     async def start(self):
         server = await asyncio.start_server(self.handle, host=None, port=9189)
@@ -185,7 +186,8 @@ class SocketHandler:
             self._sensor_type = None
             self._mac_address = None
 
-        async def register(self, macAddr, sensorInterface, **kwargs):
+        # Currently cannot be async - can be once new capnproto update is out
+        def register(self, macAddr, sensorInterface, **kwargs):
             self._logger.info(f"Received registration request from {sensorInterface.which()} ({hex(macAddr)})")
             self._sensor_type = SensorType[sensorInterface.which()]
             self._mac_address = macAddr
@@ -196,12 +198,13 @@ class SocketHandler:
                 case SensorType.rack:
                     self._sensor = sensorInterface.rack
 
-            data_feed = await self._socket_handler._connection_handler.register_sensor(self._socket_handler)
+            # TODO: Update this to await once using new capnp version
+            data_feed = self._socket_handler._connection_handler.register_sensor(self._socket_handler)
             self._logger.info(f'Responding to registration request from {hex(macAddr)} with {data_feed}')
             return data_feed
         
         def pulse(self, **kwargs):
-            self._logger.info(f"Received pluse")
+            self._logger.debug(f"Received pluse")
 
 
 def make_data_feed(match_id, role: SensorRole):
@@ -268,26 +271,31 @@ class MatchSensors:
 
 class ConnectionHandler():
     def __init__(self):
-        self._available_sensors: Dict[SensorType, List[SocketHandler]] = {SensorType.board: [], SensorType.rack: []}
+        self._available_sensors: Dict[SensorType, Dict[int, SocketHandler]] = {SensorType.board: {}, SensorType.rack: {}}
         self._assigned_sensors: Dict[int, Tuple[str, SensorRole]] = {}
         self._active_matches: Dict[str, MatchSensors] = {}
         self._logger = get_logger(__class__.__name__)
 
-    async def register_sensor(self, server: SocketHandler):
+    def register_sensor(self, server: SocketHandler):
         mac_addr = server.mac_address
         if mac_addr in self._assigned_sensors:
             match_id, role = self._assigned_sensors[mac_addr]
             if not are_compatible(server.sensor_type):
                 self._logger.error(f'Received registration request from {hex(mac_addr)} with sensor type clash, previously {role}, now {server.sensor_type}, disconnecting')
-                await server.disconnect_client()
+                assert False, "Currently unable to disconnect client as method cannot be asynchronous"
+                #await server.disconnect_client()
             else:
                 if self._active_matches[match_id].reconnect_sensor(role, server):
                     return make_data_feed(match_id, role)
                 else:
                     self._logger.error(f'Unable to reconnect sensor {hex(mac_addr)} to match {match_id}, either due to sensor role mismatch or old socket was not cleaned up properly')
         else:
-            self._logger.info(f"Registered {server.sensor_type} ({hex(mac_addr)})")
-            self._available_sensors[server.sensor_type].append(server)
+            if mac_addr in self._available_sensors[server.sensor_type]:
+                self._logger.error(f'Received duplicate registration request from {hex(mac_addr)}, disconnecting')
+                assert False, "Currently unable to disconnect client as method cannot be asynchronous"
+            else:
+                self._logger.info(f"Registered {server.sensor_type} ({hex(mac_addr)})")
+                self._available_sensors[server.sensor_type][mac_addr] = server
         
         return {'none': None}
         
@@ -296,13 +304,13 @@ class ConnectionHandler():
         assert match_id not in self._active_matches, f"Match ID {match_id} already used in active match"
 
         assigned_sensors = False
-
+    
         while not assigned_sensors:
             if len(self._available_sensors[SensorType.board]) < 1:
                 self._logger.info("Insufficient available boards, unable to assign match")
                 return False
             
-            if len(self._available_sensors[SensorType.rack] < 2):
+            if len(self._available_sensors[SensorType.rack]) < 2:
                 self._logger.info("Insufficient available racks, unable to assign match")
                 return False
             
@@ -310,11 +318,14 @@ class ConnectionHandler():
             p1_socket = self._select_available_sensor(SensorType.rack)
             p2_socket = self._select_available_sensor(SensorType.rack)
             
+            test = await board_socket.sensor.assignMatch(BoardFeed(board_socket.sensor, match_id)).a_wait()
+            self._logger.info(f"[{match_id}] obtained assignMatch response {test}")
             match_assign_coroutines = [
                 board_socket.sensor.assignMatch(BoardFeed(board_socket.sensor, match_id)).a_wait(),
                 p1_socket.sensor.assignMatch(RackFeed(p1_socket.sensor, match_id, SensorRole.player1)).a_wait(),
                 p2_socket.sensor.assignMatch(RackFeed(p2_socket.sensor, match_id, SensorRole.player2)).a_wait()
             ]
+            self._logger.info(f"[{match_id}] Sending match assignment requests to sensors")
             results = await asyncio.gather(*match_assign_coroutines)
             results = [res.success for res in results]
             self._logger.debug(f"[{match_id}] Obtained assignment responses {results}")
@@ -328,9 +339,24 @@ class ConnectionHandler():
         self._active_matches[match_id] = MatchSensors(board_socket, p1_socket, p2_socket)
         
         return True
+    
+    def on_disconnect(self, socket):
+        mac_addr = socket.mac_address
+        sensor_type = socket.sensor_type
+        if sensor_type is None or mac_addr is None:
+            self._logger.info(f"Unregistered sensor disconnected, type={sensor_type}, mac={mac_addr}")
+        elif mac_addr in self._available_sensors[sensor_type]:
+            self._logger.info(f"Unassigned sensor disconnected, type={sensor_type}, mac={mac_addr}, removing from available pool")
+            del self._available_sensors[sensor_type][mac_addr]
+        elif mac_addr in self._assigned_sensors:
+            match_id, role = self._assigned_sensors[mac_addr]
+            self._logger.warning(f"Active sensor disconnected, mac={mac_addr}, match_id={match_id}, role={role}")
+            # Active sensors aren't touched, since state of sockethandler is used to provide error messages
+        else:
+            self._logger.warning(f"Removing unmanaged socket from ConnectionHandler type={sensor_type}, mac={mac_addr}")
         
     def _select_available_sensor(self, sensor_type: SensorType):
-        sensor = self._available_sensors[sensor_type].pop()
+        _, sensor = self._available_sensors[sensor_type].popitem()
         return sensor
 
 async def test_client_rpc(server: TCPServer):
@@ -352,9 +378,11 @@ async def test_client_rpc(server: TCPServer):
         await asyncio.sleep(5)
 
 async def test_assign_match(server: TCPServer):
+    logger = get_logger('TEST')
     success = False
     while not success:
-        success = await server.assign_match("Testing assign match")
+        logger.info("Testing assign match")
+        success = await server.assign_match("ExampleID")
         await asyncio.sleep(5)
 
 async def main(loop):

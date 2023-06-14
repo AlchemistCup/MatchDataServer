@@ -33,15 +33,23 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
 
 addLoggingLevel('DEBUG2', logging.DEBUG - 1)
 
+loggers = {}
+
 def get_logger(name) -> logging.Logger:
+    global loggers
+
+    if loggers.get(name):
+        return loggers.get(name)
+    
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    ch.setLevel(logging.INFO)
 
-    formatter = logging.Formatter('%(asctime)s [%(levelname)-s] [%(name)-10s] %(message)s')
+    formatter = logging.Formatter('%(asctime)s [%(levelname)-s] [%(name)-5s] %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
+    loggers[name] = logger
     return logger

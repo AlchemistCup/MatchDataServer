@@ -1,5 +1,6 @@
 import asyncio
 import logging
+
 import capnp
 import game_capture_capnp
 
@@ -138,6 +139,7 @@ class Client:
 
         # Callback
         await self.on_connect(self._server)
+        self._logger.info("Returned from on_connect")
 
         # Spin here until connection is broken
         while self._is_connected: # Do we update this correctly?
@@ -187,6 +189,7 @@ class Client:
             self._reconnection_attempts = 0
 
         # Gently end tasks (should not delay more than 5 seconds)
+        self._is_connected = False
         self._retry_task = False
         self._logger.debug(f"Tasks open: {len(self._tasks)}")
         for index, task in enumerate(self._tasks):
