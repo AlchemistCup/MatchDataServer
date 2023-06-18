@@ -39,12 +39,12 @@ struct Sensor {
 
 # Used to publish rack information to the server
 interface RackFeed {
-  sendRack @0 (matchId :Text, player :Player, tiles :Text) -> (success :Bool);
+  sendRack @0 (tiles :Text) -> (success :Bool);
 }
 
 # Used to publish board information to the server
 interface BoardFeed {
-  sendMove @0 (matchId :Text, move :Move) -> (success :Bool);
+  sendMove @0 (move :Move) -> (success :Bool);
 }
 
 # Generic server interface used to handle logic common to both sensors
