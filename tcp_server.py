@@ -1,12 +1,8 @@
 import asyncio
 import logging
 from enum import Enum
-<<<<<<< HEAD
-from typing import Dict, List, Tuple
-from time import time
-=======
 from typing import Dict, List, Tuple, Optional
->>>>>>> c97e23382faba44b9e8dd7abe8b755ffacb28c54
+from time import time
 
 from logger import get_logger
 from util import Singleton
@@ -194,7 +190,8 @@ class SocketHandler:
                 self._retry = False
             await asyncio.sleep(0.01)
 
-        await tasks
+        for task in tasks:
+            await task
         self._logger.debug(f"Finished serving {self._peername}")
 
     async def disconnect_client(self):
@@ -279,7 +276,7 @@ class MatchSensors:
 
     def reconnect_sensor(self, role: SensorRole, sensor: SocketHandler):
         old = self._sensors[role]
-        print(f"Old socket status {old.is_connected}, {old.mac_address}")
+        #print(f"Old socket status {old.is_connected}, {old.mac_address}")
         if old.is_connected or old.mac_address != sensor.mac_address:
             return False
         
