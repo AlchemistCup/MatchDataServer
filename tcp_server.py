@@ -2,6 +2,7 @@ import asyncio
 import logging
 from enum import Enum
 from typing import Dict, List, Tuple
+from time import time
 
 from logger import get_logger
 from util import Singleton
@@ -101,6 +102,7 @@ class SocketHandler:
         self._reader = reader
         self._writer = writer
         self._retry = True
+        self._last_pulse = time()
 
     @property
     def sensor_type(self):
@@ -156,10 +158,21 @@ class SocketHandler:
         self._logger.debug2("mywriter done.")
         return True
     
+    async def check_pulse(self):
+        while self._retry:
+            if time() - self._last_pulse > 5:
+                self._logger.warning(f"Disconnecting {self._peername} due to inactivity (missed heartbeat)")
+                await self.disconnect_client()
+            await asyncio.sleep(2.5)
+
     async def serve(self):
+        tasks = []
         # Assemble reader and writer tasks, run in the background
         coroutines = [self.socketreader(), self.socketwriter()]
-        tasks = asyncio.gather(*coroutines, return_exceptions=True)
+        tasks.append(asyncio.gather(*coroutines, return_exceptions=True))
+
+        coroutines = [self.check_pulse()]
+        tasks.append(asyncio.gather(*coroutines, return_exceptions=True))
 
         while self._retry:
             self._capnp_server.poll_once()
@@ -170,6 +183,7 @@ class SocketHandler:
             await asyncio.sleep(0.01)
 
         await tasks
+        self._logger.debug(f"Finished serving {self._peername}")
 
     async def disconnect_client(self):
         self._logger.info(f"Disconnecting {self._peername}")
@@ -205,6 +219,7 @@ class SocketHandler:
         
         def pulse(self, **kwargs):
             self._logger.debug(f"Received pluse")
+            self._socket_handler._last_pulse = time()
 
 
 def make_data_feed(match_id, role: SensorRole):
@@ -256,6 +271,9 @@ class MatchSensors:
             return False
         
         self._sensors[role] = sensor
+
+    def get_sensor(self, role: SensorRole):
+        return self._sensors.get(role)
 
     @property
     def board(self):
