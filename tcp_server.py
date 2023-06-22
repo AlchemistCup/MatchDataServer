@@ -6,11 +6,12 @@ from time import time
 
 from logger import get_logger
 from util import Singleton
-from matchdata import GameStateStore
+from matchdata import GameStateStore, SensorRole
 
 import capnp
 import game_capture_capnp
 from scrabble.src.board_pos import Pos
+from scrabble.src.tile import Tile
 
 """
 Notes:
@@ -26,11 +27,6 @@ Notes:
 class SensorType(Enum):
     board = 1
     rack = 2
-
-class SensorRole(Enum):
-    board = 1
-    player1 = 2
-    player2 = 3
 
 def are_compatible(type: SensorType, role: SensorRole):
     match type:
@@ -244,27 +240,56 @@ class RackFeed(game_capture_capnp.RackFeed.Server):
     def __init__(self, match_id, player: SensorRole):
         assert are_compatible(SensorType.rack, player)
         self._match_id = match_id
-        self._player = player
-        self._logger = get_logger(__class__.__name__)
+        self._role = player
+        self._logger = get_logger(f'{__class__.__name__}-{match_id}-{player}')
 
     def sendRack(self, tiles, **kwargs):
-        self._logger.info(f"[{self._match_id}] Received rack {tiles} for player {self._player}")
+        tiles = tiles.upper()
+        self._logger.info(f"Received rack {tiles}")
 
-        return True
+        histogram = {}
+        for letter in tiles:
+            if not (letter.isupper() or letter == '?'):
+                self._logger.warning(f"Ignoring tiles {tiles} as they contain invalid letter '{letter}'")
+                return False
+            
+            histogram.setdefault(letter, 0)
+            histogram[letter] += 1
+
+        delta_resolver = GameStateStore().get_game_state(self._match_id).get_resolver(self._role)
+
+        return delta_resolver.process_delta(histogram)
     
 class BoardFeed(game_capture_capnp.BoardFeed.Server):
     def __init__(self, match_id):
         self._match_id = match_id
-        self._logger = get_logger(__class__.__name__)
+        self._role = SensorRole.board
+        self._logger = get_logger(f'{__class__.__name__}-{match_id}')
     
     def sendMove(self, move, **kwargs):
-        def formatTile(tile):
+        def format_tile(tile):
             return f"Tile '{chr(tile.value)}' @ {Pos(tile.pos.row, tile.pos.col)}" 
         
-        move_str = ', '.join(formatTile(tile) for tile in move.tiles)
-        self._logger.info(f"[{self._match_id}] Received move {move_str}")
+        move_str = ', '.join(format_tile(tile) for tile in move.tiles)
+        self._logger.info(f"Received move {move_str}")
 
-        return True
+        delta = {}
+        for play in move.tiles:
+            if pos := Pos(play.pos.row, play.pos.col) in delta:
+                self._logger.warning(f'Ignoring move {move_str} as it contains multiple tiles for pos {pos}')
+                return False
+            
+            try:
+                tile = Tile(play.value)
+            except ValueError:
+                self._logger.warning(f"Ignoring move {move_str} as it contains invalid letter '{play.value}'")
+                return False
+            
+            delta[pos] = tile
+
+        delta_resolver = GameStateStore().get_game_state(self._match_id).get_resolver(self._role)
+
+        return delta_resolver.process_delta(delta)
 
 class MatchSensors:
     def __init__(self, board: SocketHandler, p1_rack: SocketHandler, p2_rack: SocketHandler):

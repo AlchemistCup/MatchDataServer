@@ -47,9 +47,14 @@ def get_logger(name) -> logging.Logger:
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
 
+    fh = logging.FileHandler('test.log')
+    fh.setLevel(logging.INFO)
+
     formatter = logging.Formatter('%(asctime)s [%(levelname)-s] [%(name)-5s] %(message)s')
     ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
     logger.addHandler(ch)
+    logger.addHandler(fh)
 
     loggers[name] = logger
     return logger

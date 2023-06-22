@@ -51,18 +51,21 @@ class FakeBoardClient(Client):
             while self._retry_task:
                 await asyncio.sleep(10)
                 if self._data_feed is not None:
-                    await self.send_move(
-                        {'tiles': [
-                                {
-                                    'value': ord('A'),
-                                    'pos': {'row': 4, 'col': 9}
-                                },
-                                {
-                                    'value': ord('?'),
-                                    'pos': {'row': 4, 'col': 10}
-                                }
-                            ]
-                        }
+                    await self.handle_request(
+                        self.send_move(
+                            {'tiles': [
+                                    {
+                                        'value': ord('A'),
+                                        'pos': {'row': 4, 'col': 9}
+                                    },
+                                    {
+                                        'value': ord('?'),
+                                        'pos': {'row': 4, 'col': 10}
+                                    }
+                                ]
+                            }
+                        ),
+                        timeout=1.0
                     )
         
         self.add_task(test_send_move)

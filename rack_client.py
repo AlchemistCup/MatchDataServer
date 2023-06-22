@@ -52,7 +52,10 @@ class FakeRackClient(Client):
             while self._retry_task:
                 await asyncio.sleep(10)
                 if self._data_feed is not None:
-                    await self.send_rack("Example tiles")
+                    await self.handle_request(
+                        self.send_rack("Example tiles"),
+                        timeout=1.0
+                    )
 
         self.add_task(test_send_rack)
         return True
