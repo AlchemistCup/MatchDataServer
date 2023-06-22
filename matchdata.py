@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Dict, Tuple, List
 
 from util import Singleton
-from tcp_server import SensorRole
 from logger import get_logger
 
 from tile_bag import TileBag
