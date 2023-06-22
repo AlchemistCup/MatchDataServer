@@ -10,8 +10,7 @@ from matchdata import GameStateStore, SensorRole
 
 import capnp
 import game_capture_capnp
-from scrabble.src.board_pos import Pos
-from scrabble.src.tile import Tile
+from scrabble import Pos, Tile
 
 """
 Notes:

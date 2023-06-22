@@ -2,10 +2,7 @@ import time
 from typing import Dict
 from logging import Logger
 
-from scrabble.src.board_pos import Pos
-from scrabble.src.board import Board
-from scrabble.src.tile import Tile
-from scrabble.src.move import Move
+from scrabble import Pos, Board, Tile, Move
 
 class BoardDeltaResolver():
     # Currently identical to values in RackDeltaResolver, but separate values are used to facilitate individual tuning in the future
