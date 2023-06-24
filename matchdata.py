@@ -203,6 +203,7 @@ class GameState():
         if not self._get_drawing_rack().set_expected_drawn_tiles(played_tiles):
             raise RuntimeError("Unable to undo challenge (should never happen)")
         
+        self._logger.info(f"Challenged move has been undone:\n{self._board}")
         return move_info.score
     
     @property
