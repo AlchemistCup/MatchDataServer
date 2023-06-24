@@ -61,7 +61,7 @@ class GameStateStore(metaclass=Singleton):
     
 
 class EndOfTurn():
-    def __init__(self, score: int, n_of_blanks: int, end_of_game_bonus: Optional[int]) -> None:
+    def __init__(self, score: int, n_of_blanks: int, end_of_game_bonus: Optional[int] = None) -> None:
         self.score = score
         self.n_of_blanks = n_of_blanks
         self.end_of_game_bonus = end_of_game_bonus
