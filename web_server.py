@@ -52,6 +52,8 @@ class HTTPServer:
             else:
                 return HTTPServer._error(res.error)
 
+            match_id = request.query.get('match_id')
+            self._logger.info(f"[{match_id}] Received end turn event")
             player_time = request.query.get('player_time')
             res = await game_state.end_turn(player_time)
             if res.is_success:
@@ -69,6 +71,8 @@ class HTTPServer:
                 return HTTPServer._error(res.error)
             
             challenge_words = list(game_state.board.get_challenge_words())
+            match_id = request.query.get('match_id')
+            self._logger.info(f"[{match_id}] Challenge request initiated, available words = {challenge_words}")
 
             if len(challenge_words) == 0:
                 return HTTPServer._error("No challenge words")
@@ -104,6 +108,8 @@ class HTTPServer:
             if successful:
                 self._logger.info(f"[{match_id}] Challenge was successful, undoing previous move")
                 game_state.board.undo_move()
+            else:
+                self._logger.info(f"[{match_id}] Challenge was unsuccessful, applying {len(words) * 5}-point penalty")
             
             return HTTPServer._success({
                 "successful": successful,
