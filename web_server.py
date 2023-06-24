@@ -62,7 +62,7 @@ class HTTPServer:
         @routes.get('/challengeable-words')
         async def get_challengeable_words(request: web.Request):
             self._logger.debug(f"Received get_challengeable_words request {request.query}")
-            res = self._validate_request(request)
+            res = self._validate_request(request, turn_modifier=-1)
             if res.is_success:
                 game_state = res.value
             else:
