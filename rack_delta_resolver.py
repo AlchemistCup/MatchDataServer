@@ -72,6 +72,22 @@ class RackDeltaResolver():
         self._prev_snapshot = self._curr_snapshot
         self._confidence = 0
         return True
+    
+    def set_expected_drawn_tiles(self, tile_hist: Dict[Tile, int]):
+        """
+        This method is used to set the tiles expected to be on the rack at the end of the turn. This is used to ensure that rack state is reset to previous drawn state after a successful challenge
+        """
+        if self._state != RackState.Drawing:
+            self._logger.error(f"Unable to set expected drawn tiles in {self._state.name} state")
+            return False
+        elif sum(tile_hist.values()) + sum(self._prev_snapshot.values()) > 7:
+            self._logger.error(f"Too many expected tiles given, previous rack = {self._prev_snapshot}, expected draw = {tile_hist}")
+            return False
+    
+        for tile, count in tile_hist.items():
+            self._prev_snapshot.setdefault(tile, 0)
+            self._prev_snapshot[tile] += count
+        return True
 
     @property
     def current_rack(self):

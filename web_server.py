@@ -107,7 +107,7 @@ class HTTPServer:
 
             if successful:
                 self._logger.info(f"[{match_id}] Challenge was successful, undoing previous move")
-                game_state.board.undo_move()
+                game_state.on_successful_challenge()
             else:
                 self._logger.info(f"[{match_id}] Challenge was unsuccessful, applying {len(words) * 5}-point penalty")
             

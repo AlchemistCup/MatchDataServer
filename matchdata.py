@@ -190,6 +190,21 @@ class GameState():
 
         return Result.success(end_of_turn_info)
     
+    def on_successful_challenge(self):
+        """
+        Performs the required state changes associated with a successful challenge, i.e. undoing the move on the board and resetting the relevant player's rack. Returns the score associated with the undone play.
+        """
+        move_info = self._board.undo_move()
+        played_tiles = {}
+        for tile, _ in move_info.move:
+            played_tiles.setdefault(tile, 0)
+            played_tiles[tile] += 1
+
+        if not self._get_drawing_rack().set_expected_drawn_tiles(played_tiles):
+            raise RuntimeError("Unable to undo challenge (should never happen)")
+        
+        return move_info.score
+    
     @property
     def board(self):
         return self._board
