@@ -87,6 +87,8 @@ class RackDeltaResolver():
         for tile, count in tile_hist.items():
             self._prev_snapshot.setdefault(tile, 0)
             self._prev_snapshot[tile] += count
+
+        self._logger.info(f'Reset expected tiles to previous state {self._prev_snapshot}')
         return True
 
     @property
