@@ -8,7 +8,7 @@ class MatchDataServer:
     def __init__(self, loop):
         self._loop = loop
         self._tcp_server = TCPServer(loop)
-        self._http_server = HTTPServer(loop)
+        self._http_server = HTTPServer(loop, self._tcp_server)
         self._logger = get_logger('MainServer')
 
     async def start(self):

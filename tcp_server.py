@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Optional
 from time import time
 
 from logger import get_logger
-from util import Singleton
+from util import Result
 from matchdata import GameStateStore, SensorRole
 
 import capnp
@@ -57,8 +57,8 @@ class TCPServer():
         self._logger.info(f"TCP server listnening on port {addr[1]}")
         await server.serve_forever()
 
-    async def assign_match(self, match_id: str):
-        return await self._connection_handler.assign_match(match_id)
+    async def assign_match(self, match_id: str, player_names: Tuple[str, str]):
+        return await self._connection_handler.assign_match(match_id, player_names)
     
     async def confirm_move(self, match_id, move):
         # Currently just being used to test RPC functionality
@@ -357,19 +357,24 @@ class ConnectionHandler():
         return {'none': None}
         
 
-    async def assign_match(self, match_id: str):
+    async def assign_match(self, match_id: str, player_names: Tuple[str, str]) -> Optional[str]:
+        """
+        Tries to setup a match by assigning sensors the the designated match_id. Returns an optional string containing an error message, or None if successful.
+        """
         assert match_id not in self._active_matches, f"Match ID {match_id} already used in active match"
 
         assigned_sensors = False
     
         while not assigned_sensors:
             if len(self._available_sensors[SensorType.board]) < 1:
-                self._logger.error(f"[{match_id}] Insufficient available boards, unable to assign match")
-                return False
+                error = "Insufficient available board"
+                self._logger.error(f"[{match_id}] Unable to assign match due to {error}")
+                return error
             
             if len(self._available_sensors[SensorType.rack]) < 2:
-                self._logger.error(f"[{match_id}] Insufficient available racks, unable to assign match")
-                return False
+                error = "Insufficient available racks"
+                self._logger.error(f"[{match_id}] Unable to assign match due to {error}")
+                return error
             
             board_socket = self._select_available_sensor(SensorType.board)
             p1_socket = self._select_available_sensor(SensorType.rack)
@@ -389,21 +394,19 @@ class ConnectionHandler():
                 )
             except asyncio.TimeoutError:
                 self._logger.debug(f"[{match_id}] Did not receive match assignment reply from all sensors")
-                return False
+                continue
             
             results = [res.success for res in results]
             self._logger.debug(f"[{match_id}] Obtained assignment responses {results}")
             assigned_sensors = all(results) and all([sensor.is_connected for sensor in [board_socket, p1_socket, p2_socket]])
 
-        GameStateStore().create_new_match(match_id, self)
+        GameStateStore().create_new_match(match_id, player_names, self)
 
         self._assigned_sensors[board_socket.mac_address] = (match_id, SensorRole.board)
         self._assigned_sensors[p1_socket.mac_address] = (match_id, SensorRole.player1)
         self._assigned_sensors[p2_socket.mac_address] = (match_id, SensorRole.player2)
         self._active_matches[match_id] = MatchSensors(board_socket, p1_socket, p2_socket)
         self._logger.info(f"[{match_id}] Successfully assigned sensors")
-        
-        return True
     
     async def confirm_move(self, match_id, move: Move):
         board = self.get_match_sensors(match_id).board

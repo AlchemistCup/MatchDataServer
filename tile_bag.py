@@ -42,3 +42,10 @@ class TileBag():
         tiles_on_rack = sum(rack.values())
         tiles_in_bag = sum(self._tile_histogram.values())
         return min(tiles_on_rack + tiles_in_bag, 7)
+    
+    @property
+    def n_of_tiles(self):
+        """
+        Returns the number of tiles left in the bag
+        """
+        return sum(self._tile_histogram.values())
