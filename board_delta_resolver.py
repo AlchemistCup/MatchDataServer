@@ -16,6 +16,10 @@ class BoardDeltaResolver():
         self._last_update = 0
         self._logger = logger
 
+    @property
+    def delta(self):
+        return self._delta
+
     def process_delta(self, delta: Dict[Pos, Tile]):
         if not self._validate_delta(delta):
             return False

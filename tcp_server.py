@@ -248,12 +248,14 @@ class RackFeed(game_capture_capnp.RackFeed.Server):
 
         histogram = {}
         for letter in tiles:
-            if not (letter.isupper() or letter == '?'):
+            try:
+                tile = Tile(letter)
+            except ValueError:
                 self._logger.warning(f"Ignoring tiles {tiles} as they contain invalid letter '{letter}'")
                 return False
             
-            histogram.setdefault(letter, 0)
-            histogram[letter] += 1
+            histogram.setdefault(tile, 0)
+            histogram[tile] += 1
 
         game_state = GameStateStore().get_game_state(self._match_id)
         return game_state.process_delta(self._role, histogram)

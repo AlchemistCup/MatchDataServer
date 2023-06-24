@@ -1,14 +1,17 @@
 from typing import Dict
 
+from scrabble import Tile
 class TileBag():
-    def __init__(self):
-        self._tile_histogram = {
-            'A': 9, 'B': 2, 'C': 2, 'D': 4, 'E': 12, 'F': 2, 'G': 3, 'H': 2, 'I': 9,
-            'J': 1, 'K': 1, 'L': 4, 'M': 2, 'N': 6, 'O': 8, 'P': 2, 'Q': 1, 'R': 6,
-            'S': 4, 'T': 6, 'U': 4, 'V': 2, 'W': 2, 'X': 1, 'Y': 2, 'Z': 1, '?': 2
-        }
+    STARTING_BAG = {
+        'A': 9, 'B': 2, 'C': 2, 'D': 4, 'E': 12, 'F': 2, 'G': 3, 'H': 2, 'I': 9,
+        'J': 1, 'K': 1, 'L': 4, 'M': 2, 'N': 6, 'O': 8, 'P': 2, 'Q': 1, 'R': 6,
+        'S': 4, 'T': 6, 'U': 4, 'V': 2, 'W': 2, 'X': 1, 'Y': 2, 'Z': 1, '?': 2
+    }
 
-    def is_feasible(self, rack: Dict[str, int]):
+    def __init__(self):
+        self._tile_histogram = {Tile(letter): count for letter, count in self.STARTING_BAG.items()}
+
+    def is_feasible(self, rack: Dict[Tile, int]):
         if sum(rack.values())> 7:
             return False
         
@@ -18,7 +21,7 @@ class TileBag():
         
         return True
     
-    def remove_tiles(self, tiles: Dict[str, int]):
+    def remove_tiles(self, tiles: Dict[Tile, int]):
         if not self.is_feasible(tiles):
             return False 
         
@@ -26,7 +29,7 @@ class TileBag():
             self._tile_histogram[tile] -= count
         return True
     
-    def add_tiles(self, tiles: Dict[str, int]):
+    def add_tiles(self, tiles: Dict[Tile, int]):
         for tile, count in tiles.items():
             self._tile_histogram[tile] += count
         return True
@@ -38,7 +41,7 @@ class TileBag():
         for tile in self._tile_histogram.keys():
             self._tile_histogram[tile] = 0
     
-    def get_expected_tiles_on_rack(self, rack: Dict[str, int]) -> int:
+    def get_expected_tiles_on_rack(self, rack: Dict[Tile, int]) -> int:
         tiles_on_rack = sum(rack.values())
         tiles_in_bag = sum(self._tile_histogram.values())
         return min(tiles_on_rack + tiles_in_bag, 7)

@@ -67,12 +67,27 @@ class GameState():
         return res
     
     def end_turn(self):
+        playing_resolver: RackDeltaResolver = self._delta_resolvers[self._get_active_player()]
+        rack_delta = playing_resolver.delta
+        board_delta = self._board_resolver.delta
+
+        if any(not resolver.end_turn() for resolver in self._delta_resolvers.values()):
+            self._logger.error("Unable to resolve end of turn deltas due to resolver error")
+            return False
+        
         # If playing rack delta is non-zero, but board delta is zero => tile exchange took place
 
         # If both board and rack delta is zero => pass
 
         # Else play took place, deltas from board and rack must match up
         pass
+
+    @property
+    def _board_resolver(self) -> BoardDeltaResolver:
+        return self._delta_resolvers[SensorRole.board]
+
+    def _get_active_player(self):
+        return SensorRole.player2 if self._turn_n % 2 else SensorRole.player1
 
 class Dictionary(metaclass=Singleton):
     def __init__(self, path: Path = CSW21_PATH):

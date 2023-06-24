@@ -5,6 +5,7 @@ from typing import Dict
 from logging import Logger
 
 from tile_bag import TileBag
+from scrabble import Tile
 
 class RackState(Enum):
     Drawing = 0
@@ -22,15 +23,15 @@ class RackDeltaResolver():
     MIN_ACCEPTABLE_CONFIDENCE = 2
 
     def __init__(self, bag: TileBag, logger: Logger) -> None:
-        self._prev_snapshot: Dict[str, int] = {}
-        self._curr_snapshot: Dict[str, int] = {}
+        self._prev_snapshot: Dict[Tile, int] = {}
+        self._curr_snapshot: Dict[Tile, int] = {}
         self._state = RackState.Drawing
         self._confidence = 0
         self._last_update = 0
         self._bag = bag
         self._logger = logger
 
-    def process_delta(self, rack: Dict[str, int]):        
+    def process_delta(self, rack: Dict[Tile, int]):        
         match self._state:
             case RackState.Drawing:
                 res = self._validate_drawing_delta(rack)
@@ -77,6 +78,17 @@ class RackDeltaResolver():
         return self._curr_snapshot
     
     @property
+    def delta(self):
+        """
+        Returns the difference between the rack's current and previous snapshots
+        """
+        match self._state:
+            case RackState.Playing:
+                return RackDeltaResolver._get_delta(self._prev_snapshot, self._curr_snapshot)
+            case RackState.Drawing:
+                return RackDeltaResolver._get_delta(self._curr_snapshot, self._prev_snapshot)
+    
+    @property
     def n_of_tiles(self):
         return sum(self._curr_snapshot.values())
     
@@ -84,7 +96,7 @@ class RackDeltaResolver():
     def confidence(self):
         return self.confidence
 
-    def _validate_drawing_delta(self, rack: Dict[str, int]):
+    def _validate_drawing_delta(self, rack: Dict[Tile, int]):
         assert self._state == RackState.Drawing, f"Called {inspect.stack()[0][3]} in invalid state {self._state}"
 
         if not RackDeltaResolver._is_superset(rack, self._prev_snapshot):
@@ -105,7 +117,7 @@ class RackDeltaResolver():
 
         return True
     
-    def _validate_playing_delta(self, rack: Dict[str, int]):
+    def _validate_playing_delta(self, rack: Dict[Tile, int]):
         assert self._state == RackState.Playing, f"Called {inspect.stack()[0][3]} in invalid state {self._state}"
 
         if not RackDeltaResolver._is_subset(rack, self._prev_snapshot):
@@ -115,7 +127,7 @@ class RackDeltaResolver():
         return True
     
     @staticmethod
-    def _is_superset(current: Dict[str, int], previous: Dict[str, int]):
+    def _is_superset(current: Dict[Tile, int], previous: Dict[Tile, int]):
         """
         Returns true if current is a superset of previous
         """
@@ -126,14 +138,14 @@ class RackDeltaResolver():
         return True
     
     @staticmethod
-    def _is_subset(current: Dict[str, int], previous: Dict[str, int]):
+    def _is_subset(current: Dict[Tile, int], previous: Dict[Tile, int]):
         """
         Returns true if current is a superset of previous
         """
         return RackDeltaResolver._is_superset(previous, current)
     
     @staticmethod
-    def _get_delta(superset: Dict[str, int], subset: Dict[str, int]):
+    def _get_delta(superset: Dict[Tile, int], subset: Dict[Tile, int]):
         """
         Returns a histogram of the difference between two histograms, where one is a superset of the other
         """
