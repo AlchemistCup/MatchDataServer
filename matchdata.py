@@ -212,7 +212,7 @@ class GameState():
         board_hist = {}
         for tile in board_delta.values():
             board_hist.setdefault(tile, 0)
-            board_hist += 1
+            board_hist[tile] += 1
 
         return board_hist == rack_delta
     
