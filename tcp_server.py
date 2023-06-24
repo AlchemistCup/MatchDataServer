@@ -240,11 +240,11 @@ class RackFeed(game_capture_capnp.RackFeed.Server):
         assert are_compatible(SensorType.rack, player)
         self._match_id = match_id
         self._role = player
-        self._logger = get_logger(f'{__class__.__name__}-{match_id}-{player}')
+        self._logger = get_logger(f'{__class__.__name__}-{match_id}-{player.name}')
 
     def sendRack(self, tiles, **kwargs):
         tiles = tiles.upper()
-        self._logger.info(f"Received rack {tiles}")
+        self._logger.debug2(f"Received rack {tiles}")
 
         histogram = {}
         for letter in tiles:

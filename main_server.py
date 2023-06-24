@@ -19,4 +19,4 @@ if __name__ == '__main__':
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     server = MatchDataServer(loop)
-    asyncio.run(server.start())
+    loop.run_until_complete(server.start())
