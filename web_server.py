@@ -117,7 +117,7 @@ class HTTPServer:
             body = await request.json()
             self._logger.debug(f"Request body = {body}")
 
-            res = self._validate_request(request)
+            res = self._validate_request(request, turn_modifier=-1) # Need blanks from previous turn
             if res.is_success:
                 game_state = res.value
             else:
@@ -139,7 +139,7 @@ class HTTPServer:
         self._logger.info(f"HTTP server listening on port {site._port}")
         await asyncio.Event().wait()
 
-    def _validate_request(self, request: web.Request) -> Result[md.GameState]:
+    def _validate_request(self, request: web.Request, turn_modifier: int = 0) -> Result[md.GameState]:
         match_id = request.query.get('match_id')
         turn_number = request.query.get('turn_number')
 
@@ -150,10 +150,10 @@ class HTTPServer:
 
         game_state = md.GameStateStore().get_game_state(match_id)
         if game_state is None:
-            self._logger.error(f"[{match_id}] Received end_turn request which doesn't have associated game state")
+            self._logger.error(f"[{match_id}] Received request which doesn't have associated game state")
             return Result.failure("Invalid match_id")
-        elif game_state.turn_number != turn_number:
-            self._logger.error(f"[{match_id}]Received end turn request with turn number {turn_number} that does not match game state turn number {game_state.turn_number}")
+        elif game_state.turn_number + turn_modifier != turn_number:
+            self._logger.error(f"[{match_id}]Received request with turn number {turn_number} that does not match game state turn number {game_state.turn_number} + {turn_modifier}")
             return Result.failure("Turn out of sync")
         
         return Result.success(game_state)
