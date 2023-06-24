@@ -123,8 +123,11 @@ class HTTPServer:
             else:
                 return HTTPServer._error(res.error)
             
+            match_id = request.query.get('match_id')
             blanks_str = ''.join(body)
             if game_state.board.set_blanks(blanks_str):
+                self._logger.info(f"[{match_id}] Updated blank tile(s) of previous play to {body}")
+                self._logger.info(f"[{match_id}] Updated board state:\n{game_state.board}")
                 return HTTPServer._success({})
             else:
                 return HTTPServer._error("Unable to set blanks")
