@@ -67,12 +67,16 @@ class FakeRackClient(Client):
 
     async def send_rack(self, tiles):
         assert self._is_connected
-        self._logger.info(f"Sending rack {tiles} to server")
+        self._logger.debug2(f"Sending rack {tiles} to server")
         res = await self.handle_request(
             self._data_feed.sendRack(tiles),
             timeout=1.
         )
-        self._logger.info(f"Obtained response {res} for sendRack")
+        if res is None:
+            self._logger.error(f"Did not obtain response for sendRack {tiles}")
+        else:
+            res = res.success
+            self._logger.debug2(f"Obtained response {res} for sendRack")
         return res
 
 class RackImpl(game_capture_capnp.Rack.Server):

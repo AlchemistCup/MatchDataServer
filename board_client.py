@@ -76,17 +76,17 @@ class FakeBoardClient(Client):
 
     async def send_move(self, move):
         assert self._is_connected
-        self._logger.info("Sending move to server")
+        self._logger.debug2("Sending move to server")
         res = await self.handle_request(
             self._data_feed.sendMove(move),
             timeout=1.
         )
         
         if res is None:
-            self._logger.error(f"Did not obtain response for sendMove")
+            self._logger.error(f"Did not obtain response for sendMove {move}")
         else:
             res = res.success
-            self._logger.info(f"Obtained response {res} for sendMove")
+            self._logger.debug2(f"Obtained response {res} for sendMove")
         return res
 
 class BoardImpl(game_capture_capnp.Board.Server):
