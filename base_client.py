@@ -223,12 +223,15 @@ class Client:
         Used to prevent RPC requests from stalling when not receiving a response from the server
         """
         try:
+            self._logger.debug("Handling request")
             res = await asyncio.wait_for(
                 request.a_wait(),
                 timeout=timeout
             )
+            self._logger.debug("Handled request")
             return res
         except asyncio.TimeoutError:
+            self._logger.debug("Handle request timed out")
             return None
         
     def add_task(self, task):

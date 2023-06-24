@@ -31,12 +31,14 @@ class FakeBoardClient(Client):
     async def on_connect(self, server):
         client = BoardImpl(self)
         self._logger.info(f"Registering with server (MAC: {hex(self._mac)})")
-        data_feed = (await self.handle_request(server.register(self._mac, {'board': client}), timeout=2.0)).dataFeed
+        res = await self.handle_request(
+            server.register(self._mac, {'board': client}), timeout=2.0)
 
-        if data_feed is None:
+        if res is None:
             self._logger.error('Did not receive registration response')
             return False
         
+        data_feed = res.dataFeed
         match data_feed.which():
             case 'board':
                 self._logger.info(f"Registered successfully, reassigned to match")
@@ -49,23 +51,20 @@ class FakeBoardClient(Client):
 
         async def test_send_move():
             while self._retry_task:
-                await asyncio.sleep(10)
+                await asyncio.sleep(.5)
                 if self._data_feed is not None:
-                    await self.handle_request(
-                        self.send_move(
-                            {'tiles': [
-                                    {
-                                        'value': ord('A'),
-                                        'pos': {'row': 4, 'col': 9}
-                                    },
-                                    {
-                                        'value': ord('?'),
-                                        'pos': {'row': 4, 'col': 10}
-                                    }
-                                ]
-                            }
-                        ),
-                        timeout=1.0
+                    await self.send_move(
+                        {'tiles': [
+                                {
+                                    'value': ord('A'),
+                                    'pos': {'row': 4, 'col': 9}
+                                },
+                                {
+                                    'value': ord('?'),
+                                    'pos': {'row': 4, 'col': 10}
+                                }
+                            ]
+                        }
                     )
         
         self.add_task(test_send_move)
@@ -78,8 +77,16 @@ class FakeBoardClient(Client):
     async def send_move(self, move):
         assert self._is_connected
         self._logger.info("Sending move to server")
-        res = (await self._data_feed.sendMove(move).a_wait()).success
-        self._logger.info(f"Obtained response {res} for sendMove")
+        res = await self.handle_request(
+            self._data_feed.sendMove(move),
+            timeout=1.
+        )
+        
+        if res is None:
+            self._logger.error(f"Did not obtain response for sendMove")
+        else:
+            res = res.success
+            self._logger.info(f"Obtained response {res} for sendMove")
         return res
 
 class BoardImpl(game_capture_capnp.Board.Server):

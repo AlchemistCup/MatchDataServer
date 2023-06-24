@@ -99,6 +99,10 @@ class RackDeltaResolver():
     @property
     def confidence(self):
         return self.confidence
+    
+    @property
+    def state(self):
+        return self._state
 
     def _validate_drawing_delta(self, rack: Dict[Tile, int]):
         assert self._state == RackState.Drawing, f"Called {inspect.stack()[0][3]} in invalid state {self._state}"

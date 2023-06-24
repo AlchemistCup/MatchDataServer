@@ -142,6 +142,11 @@ class HTTPServer:
         match_id = request.query.get('match_id')
         turn_number = request.query.get('turn_number')
 
+        try:
+            turn_number = int(turn_number)
+        except (TypeError, ValueError):
+            return Result.failure("Invalid turn number")
+
         game_state = md.GameStateStore().get_game_state(match_id)
         if game_state is None:
             self._logger.error(f"[{match_id}] Received end_turn request which doesn't have associated game state")

@@ -271,24 +271,30 @@ class BoardFeed(game_capture_capnp.BoardFeed.Server):
             return f"Tile '{chr(tile.value)}' @ {Pos(tile.pos.row, tile.pos.col)}" 
         
         move_str = ', '.join(format_tile(tile) for tile in move.tiles)
-        self._logger.info(f"Received move {move_str}")
+        self._logger.debug2(f"Received move {move_str}")
 
         delta = {}
         for play in move.tiles:
-            if pos := Pos(play.pos.row, play.pos.col) in delta:
+            if (pos := Pos(play.pos.row, play.pos.col)) in delta:
                 self._logger.warning(f'Ignoring move {move_str} as it contains multiple tiles for pos {pos}')
                 return False
             
             try:
-                tile = Tile(play.value)
+                tile = Tile(chr(play.value))
             except ValueError:
-                self._logger.warning(f"Ignoring move {move_str} as it contains invalid letter '{play.value}'")
+                self._logger.warning(f"Ignoring move {move_str} as it contains invalid letter '{chr(play.value)}'")
                 return False
             
             delta[pos] = tile
 
+        
         game_state = GameStateStore().get_game_state(self._match_id)
 
+        if game_state is None:
+            self._logger.error(f"Board feed assigned to non-existent game state")
+            return False
+
+        self._logger.debug2(f"Sending delta {delta} to game state")
         return game_state.process_delta(self._role, delta)
 
 class MatchSensors:

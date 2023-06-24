@@ -31,12 +31,16 @@ class FakeRackClient(Client):
     async def on_connect(self, server):
         client = RackImpl(self)
         self._logger.info(f"Registering with server (MAC: {hex(self._mac)})")
-        data_feed = (await self.handle_request(server.register(self._mac, {'rack': client}), timeout=2.0)).dataFeed
+        res = await self.handle_request(
+            server.register(self._mac, {'rack': client}), 
+            timeout=2.0
+        )
 
-        if data_feed is None:
+        if res is None:
             self._logger.error('Did not receive registration response')
             return False
 
+        data_feed = res.dataFeed
         match data_feed.which():
             case 'board':
                 self._logger.error('Server responded with incompatible data feed to registration request')
@@ -52,10 +56,7 @@ class FakeRackClient(Client):
             while self._retry_task:
                 await asyncio.sleep(10)
                 if self._data_feed is not None:
-                    await self.handle_request(
-                        self.send_rack("Example tiles"),
-                        timeout=1.0
-                    )
+                    await self.send_rack("tiles"),
 
         self.add_task(test_send_rack)
         return True
@@ -67,8 +68,11 @@ class FakeRackClient(Client):
     async def send_rack(self, tiles):
         assert self._is_connected
         self._logger.info(f"Sending rack {tiles} to server")
-        res = (await self._data_feed.sendRack(tiles).a_wait()).success
-        self._logger.info(f"Obtained response {res} for sendMove")
+        res = await self.handle_request(
+            self._data_feed.sendRack(tiles),
+            timeout=1.
+        )
+        self._logger.info(f"Obtained response {res} for sendRack")
         return res
 
 class RackImpl(game_capture_capnp.Rack.Server):

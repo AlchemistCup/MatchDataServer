@@ -1,14 +1,14 @@
 from enum import Enum
 from pathlib import Path
-import os
-import base64
+import random
+import string
 from typing import Dict, Tuple, Optional
 
 from util import Singleton, Result
 from logger import get_logger
 
 from tile_bag import TileBag
-from rack_delta_resolver import RackDeltaResolver
+from rack_delta_resolver import RackDeltaResolver, RackState
 from board_delta_resolver import BoardDeltaResolver
 
 from scrabble.src.board_pos import Pos
@@ -37,13 +37,13 @@ class SensorRole(Enum):
                 return SensorRole.player1
 
 class GameStateStore(metaclass=Singleton):
+    _VALID_MATCH_ID_CHARACTERS = string.ascii_letters + string.digits
     def __init__(self):
         self._game_state_mapping: Dict[str, GameState] = {}
 
     def generate_new_match_id(self):
         def create_random_id():
-            r = os.urandom(6)
-            return base64.b64encode(r).decode('utf-8')
+            return ''.join(random.choices(GameStateStore._VALID_MATCH_ID_CHARACTERS, k=8))
 
         while (match_id := create_random_id()) in self._game_state_mapping:
             match_id = create_random_id()
@@ -89,11 +89,12 @@ class GameState():
         self._connection_handler = connection_handler
         self._bag = TileBag()
         self._board = Board()
-        self._logger = get_logger(f'{__class__.__name__}-{match_id}')
+        base_logger_name = f'{__class__.__name__}-{match_id}'
+        self._logger = get_logger(base_logger_name)
         self._delta_resolvers = {
-            SensorRole.board: BoardDeltaResolver(self._board, self._logger),
-            SensorRole.player1: RackDeltaResolver(self._bag, self._logger),
-            SensorRole.player2: RackDeltaResolver(self._bag, self._logger)
+            SensorRole.board: BoardDeltaResolver(self._board, get_logger(f'{base_logger_name}-board')),
+            SensorRole.player1: RackDeltaResolver(self._bag, get_logger(f'{base_logger_name}-rackP1')),
+            SensorRole.player2: RackDeltaResolver(self._bag, get_logger(f'{base_logger_name}-rackP2'))
         }    
         p1_name, p2_name = player_names
         self._player_info = {
@@ -107,9 +108,10 @@ class GameState():
         return self._turn_n
 
     def process_delta(self, role: SensorRole, delta):
+        self._logger.debug2(f'Received delta {delta} from sensor {role}')
         resolver = self._delta_resolvers.get(role)
         res = resolver.process_delta(delta) 
-
+        
         # Handle player 1 drawing during their turn at start of match
         if (self._turn_n == 0 
                 and role == SensorRole.player1
@@ -121,12 +123,17 @@ class GameState():
                 self._logger.info(f"Confirmed player 1's initial rack state {resolver.current_rack}")
                 # TODO: Propagate update to Woogles
 
+        self._logger.debug2(f"Finished processing delta {delta} from role {role}")
         return res
     
     async def end_turn(self, player_time) -> Result[EndOfTurn]:
         """
         Returns the associated data related to the end of a turn, or an error message, wrapped in a result type
         """
+        if self._get_playing_rack().state != RackState.Playing:
+            self._logger.error(f"{self._get_playing_player()}'s rack resolver not in play state. Should only happen if player 1 does not draw 7 tiles before playing.")
+            return Result.failure("Game State error")
+        
         drawing_rack_resolver = self._get_drawing_rack()
         # Currently, this partially duplicates the end_turn logic in RackDeltaResolver, which is why this check needs to be done first. Potentially could be nicer to warn players of this before the end of the turn.
         if drawing_rack_resolver.n_of_tiles > 7:
