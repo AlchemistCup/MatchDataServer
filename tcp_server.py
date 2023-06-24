@@ -373,13 +373,13 @@ class ConnectionHandler():
     
         while not assigned_sensors:
             if len(self._available_sensors[SensorType.board]) < 1:
-                error = "Insufficient available board"
-                self._logger.error(f"[{match_id}] Unable to assign match due to {error}")
+                error = "No available board"
+                self._logger.error(f"[{match_id}] {error}, unable to assign match")
                 return error
             
             if len(self._available_sensors[SensorType.rack]) < 2:
                 error = "Insufficient available racks"
-                self._logger.error(f"[{match_id}] Unable to assign match due to {error}")
+                self._logger.error(f"[{match_id}] {error}, unable to assign match")
                 return error
             
             board_socket = self._select_available_sensor(SensorType.board)
