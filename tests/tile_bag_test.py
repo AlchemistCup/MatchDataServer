@@ -20,7 +20,7 @@ class TestIsFeasible(unittest.TestCase):
         })
         self.assertTrue(bag.is_feasible(rack))
 
-    def test_invalid_too_many_tiles(self):
+    def test_too_many_tiles_valid(self):
         bag = TileBag()
         rack = to_rack({
             'C': 1,
@@ -31,7 +31,7 @@ class TestIsFeasible(unittest.TestCase):
             'W': 1,
             'Z': 1
         })
-        self.assertFalse(bag.is_feasible(rack))
+        self.assertTrue(bag.is_feasible(rack))
 
     def test_invalid_no_letter_left(self):
         bag = TileBag()

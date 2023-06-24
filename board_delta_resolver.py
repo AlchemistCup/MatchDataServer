@@ -18,7 +18,7 @@ class BoardDeltaResolver():
 
     @property
     def delta(self):
-        return self._delta
+        return self._delta.copy() # Returns a copy to ensure that property is not mutated
 
     def process_delta(self, delta: Dict[Pos, Tile]):
         if not self._validate_delta(delta):
@@ -43,7 +43,7 @@ class BoardDeltaResolver():
             self._logger.info(f"Ending turn with empty move")
             return True
 
-        move = BoardDeltaResolver._delta_to_move(self._delta)
+        move = BoardDeltaResolver.delta_to_move(self._delta)
         if not move.is_valid:
             self._logger.error(f"Cannot use move formed by delta {move} in end-of-turn resolution as it is invalid (should never happen)")
             return False
@@ -74,8 +74,8 @@ class BoardDeltaResolver():
             self._logger.warning(f'Ignoring board delta {delta} as it contains more than 7 tiles')
             return False
 
-        return len(delta) == 0 or BoardDeltaResolver._delta_to_move(delta).is_valid
+        return len(delta) == 0 or BoardDeltaResolver.delta_to_move(delta).is_valid
     
     @staticmethod
-    def _delta_to_move(delta: Dict[Pos, Tile]):
+    def delta_to_move(delta: Dict[Pos, Tile]):
         return Move(list(delta.values()), list(delta.keys()))

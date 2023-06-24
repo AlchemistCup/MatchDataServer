@@ -55,10 +55,10 @@ class RackDeltaResolver():
                 self._logger.error(f"Cannot resolve rack drawing delta resolution, unable to draw {tiles_drawn} from tile bag - should never happen (prev state = {self._prev_snapshot}, curr state = {self._curr_snapshot})")
                 return False
             
+            # Potentially move this logic out of RackDeltaResolver into GameState 
             expected_n = self._bag.get_expected_tiles_on_rack(self._prev_snapshot) 
             if expected_n != self.n_of_tiles:
                 self._logger.error(f"Incorrect # of tiles on rack at the end of drawing turn ({self.n_of_tiles}), expected {expected_n}")
-                # Need to throw here to tell top level game state so error can be passed to users
                 return False
             
         if (age := (time.time() - self._last_update) * 1000) > RackDeltaResolver.MAX_SNAPSHOT_AGE_IN_MS:
@@ -76,6 +76,10 @@ class RackDeltaResolver():
     @property
     def current_rack(self):
         return self._curr_snapshot
+    
+    @property 
+    def previous_rack(self):
+        return self._prev_snapshot
     
     @property
     def delta(self):

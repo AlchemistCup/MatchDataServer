@@ -10,7 +10,7 @@ from matchdata import GameStateStore, SensorRole
 
 import capnp
 import game_capture_capnp
-from scrabble import Pos, Tile
+from scrabble import Pos, Tile, Move
 
 """
 Notes:
@@ -324,6 +324,8 @@ class MatchSensors:
         return self._sensors[SensorRole.player2]
 
 class ConnectionHandler():
+    MAX_RETRIES = 5
+
     def __init__(self):
         self._available_sensors: Dict[SensorType, Dict[int, SocketHandler]] = {SensorType.board: {}, SensorType.rack: {}}
         self._assigned_sensors: Dict[int, Tuple[str, SensorRole]] = {}
@@ -403,6 +405,26 @@ class ConnectionHandler():
         
         return True
     
+    async def confirm_move(self, match_id, move: Move):
+        board = self.get_match_sensors(match_id).board
+        msg = ConnectionHandler._move_to_capnp(move)
+
+        for _ in range(ConnectionHandler.MAX_RETRIES):
+            if not board.is_connected:
+                self._logger.error(f"[{match_id}] Board sensor is disconnected, cannot confirm move")
+                return False
+            try:
+                res = await asyncio.wait_for(
+                            board.sensor.confirmMove(msg).a_wait(),
+                            timeout=1.0
+                        )
+                return res.success
+            except asyncio.TimeoutError:
+                self._logger.warning(f"[{match_id}] Board confirm_move request timed out")
+
+        self._logger.error(f"[{match_id}] Board confirm_move timed out {ConnectionHandler.MAX_RETRIES} times, giving up")
+        return False
+    
     def on_disconnect(self, socket):
         mac_addr = socket.mac_address
         sensor_type = socket.sensor_type
@@ -424,6 +446,19 @@ class ConnectionHandler():
     def _select_available_sensor(self, sensor_type: SensorType):
         _, sensor = self._available_sensors[sensor_type].popitem()
         return sensor
+    
+    @staticmethod
+    def _move_to_capnp(move: Move):
+        msg = {'tiles': []}
+        for tile, pos in move:
+            pos_info = {'row': pos.row, 'col': pos.col}
+            info = {
+                'value': ord(tile.letter),
+                'pos': pos_info
+            }
+            msg['tiles'].append(info)
+
+        return msg
 
 async def test_client_rpc(server: TCPServer):
     match_id = "ExampleID"

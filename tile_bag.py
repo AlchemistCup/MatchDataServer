@@ -11,10 +11,7 @@ class TileBag():
     def __init__(self):
         self._tile_histogram = {Tile(letter): count for letter, count in self.STARTING_BAG.items()}
 
-    def is_feasible(self, rack: Dict[Tile, int]):
-        if sum(rack.values())> 7:
-            return False
-        
+    def is_feasible(self, rack: Dict[Tile, int]):        
         for tile, count in rack.items():
             if self._tile_histogram[tile] < count:
                 return False

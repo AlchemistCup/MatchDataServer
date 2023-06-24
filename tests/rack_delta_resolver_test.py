@@ -40,17 +40,13 @@ class TestProcessDelta(unittest.TestCase):
             rack[tile] -= 1
             self.assertFalse(resolver.process_delta(rack.copy()))
 
-    def test_too_long_draw_delta_invalid(self):
+    def test_too_long_draw_delta_valid(self):
+        # This can happen if a player accidentally draws too many tiles. System needs to detect and warn users if this happens
         bag = TileBag()
         resolver = RackDeltaResolver(bag, logger)
 
         too_long_8 = to_rack("ABFGEEDP")
-        self.assertFalse(resolver.process_delta(too_long_8))
-
-        bag.empty()
-        bag.add_tiles({Tile('B'): 3})
-        too_long_4 = {Tile('B'): 4}
-        self.assertFalse(resolver.process_delta(too_long_4))
+        self.assertTrue(resolver.process_delta(too_long_8))
 
     def test_infeasible_draw_delta_invalid(self):
         resolver = RackDeltaResolver(TileBag(), logger)
@@ -121,10 +117,17 @@ class TestEndTurn(unittest.TestCase):
         self.assertTrue(resolver.process_delta(rack))
         self.assertTrue(resolver.end_turn())
 
-    def test_draw_turn_with_insufficient_tiles_is_invalid(self):
+    def test_draw_turn_with_too_few_tiles_is_invalid(self):
         resolver = RackDeltaResolver(TileBag(), logger)
 
         rack = to_rack("RAES?T")
+        self.assertTrue(resolver.process_delta(rack))
+        self.assertFalse(resolver.end_turn())
+
+    def test_draw_turn_with_too_many_tiles_is_invalid(self):
+        resolver = RackDeltaResolver(TileBag(), logger)
+
+        rack = to_rack("BIBIMPAP")
         self.assertTrue(resolver.process_delta(rack))
         self.assertFalse(resolver.end_turn())
 
