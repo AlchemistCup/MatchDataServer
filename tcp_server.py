@@ -255,9 +255,8 @@ class RackFeed(game_capture_capnp.RackFeed.Server):
             histogram.setdefault(letter, 0)
             histogram[letter] += 1
 
-        delta_resolver = GameStateStore().get_game_state(self._match_id).get_resolver(self._role)
-
-        return delta_resolver.process_delta(histogram)
+        game_state = GameStateStore().get_game_state(self._match_id)
+        return game_state.process_delta(self._role, histogram)
     
 class BoardFeed(game_capture_capnp.BoardFeed.Server):
     def __init__(self, match_id):
@@ -286,9 +285,9 @@ class BoardFeed(game_capture_capnp.BoardFeed.Server):
             
             delta[pos] = tile
 
-        delta_resolver = GameStateStore().get_game_state(self._match_id).get_resolver(self._role)
+        game_state = GameStateStore().get_game_state(self._match_id)
 
-        return delta_resolver.process_delta(delta)
+        return game_state.process_delta(self._role, delta)
 
 class MatchSensors:
     def __init__(self, board: SocketHandler, p1_rack: SocketHandler, p2_rack: SocketHandler):

@@ -46,10 +46,33 @@ class GameState():
             SensorRole.board: BoardDeltaResolver(self._board, self._logger),
             SensorRole.player1: RackDeltaResolver(self._bag, self._logger),
             SensorRole.player2: RackDeltaResolver(self._bag, self._logger)
-        }
+        }    
+        self._turn_n = 0
 
-    def get_resolver(self, role: SensorRole):
-        return self._delta_resolvers.get(role)                
+    def process_delta(self, role: SensorRole, delta):
+        resolver = self._delta_resolvers.get(role)
+        res = resolver.process_delta(delta) 
+
+        # Handle player 1 drawing during their turn at start of match
+        if (self._turn_n == 0 
+                and role == SensorRole.player1
+                and resolver.n_of_tiles == 7):
+            self._logger.info(f'Player 1 finished drawing tiles at start of game')
+            if not resolver.end_turn():
+                self._logger.error(f"Player 1's rack was invalid after drawing at the start of game - should be impossible (rack={resolver.current_rack})")
+            else:
+                self._logger.info(f"Confirmed player 1's initial rack state {resolver.current_rack}")
+                # TODO: Propagate update to Woogles
+
+        return res
+    
+    def end_turn(self):
+        # If playing rack delta is non-zero, but board delta is zero => tile exchange took place
+
+        # If both board and rack delta is zero => pass
+
+        # Else play took place, deltas from board and rack must match up
+        pass
 
 class Dictionary(metaclass=Singleton):
     def __init__(self, path: Path = CSW21_PATH):

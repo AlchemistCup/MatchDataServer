@@ -31,6 +31,14 @@ class TileBag():
             self._tile_histogram[tile] += count
         return True
     
-    def get_expected_tiles_on_rack(self) -> int:
-        remaining_tiles = sum(self._tile_histogram.values())
-        return min(remaining_tiles, 7)
+    def empty(self):
+        """
+        Completely empties the tile bag. Used to facilitate unit testing
+        """
+        for tile in self._tile_histogram.keys():
+            self._tile_histogram[tile] = 0
+    
+    def get_expected_tiles_on_rack(self, rack: Dict[str, int]) -> int:
+        tiles_on_rack = sum(rack.values())
+        tiles_in_bag = sum(self._tile_histogram.values())
+        return min(tiles_on_rack + tiles_in_bag, 7)

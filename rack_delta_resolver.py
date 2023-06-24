@@ -18,7 +18,7 @@ class RackState(Enum):
                 return RackState.Drawing
 
 class RackDeltaResolver():
-    MAX_SNAPSHOT_AGE_IN_MS = 2000
+    MAX_SNAPSHOT_AGE_IN_MS = 3000
     MIN_ACCEPTABLE_CONFIDENCE = 2
 
     def __init__(self, bag: TileBag, logger: Logger) -> None:
@@ -28,7 +28,6 @@ class RackDeltaResolver():
         self._confidence = 0
         self._last_update = 0
         self._bag = bag
-        self._expected_tiles = bag.get_expected_tiles_on_rack()
         self._logger = logger
 
     def process_delta(self, rack: Dict[str, int]):        
@@ -55,7 +54,13 @@ class RackDeltaResolver():
                 self._logger.error(f"Cannot resolve rack drawing delta resolution, unable to draw {tiles_drawn} from tile bag - should never happen (prev state = {self._prev_snapshot}, curr state = {self._curr_snapshot})")
                 return False
             
-        if age := (time.time() - self._last_update) * 1000 > RackDeltaResolver.MAX_SNAPSHOT_AGE_IN_MS:
+            expected_n = self._bag.get_expected_tiles_on_rack(self._prev_snapshot) 
+            if expected_n != self.n_of_tiles:
+                self._logger.error(f"Incorrect # of tiles on rack at the end of drawing turn ({self.n_of_tiles}), expected {expected_n}")
+                # Need to throw here to tell top level game state so error can be passed to users
+                return False
+            
+        if (age := (time.time() - self._last_update) * 1000) > RackDeltaResolver.MAX_SNAPSHOT_AGE_IN_MS:
             self._logger.error(f"Most recent update {self._curr_snapshot} received {age:.2f} ms ago is too old to use in end-of-turn resolution")
             return False
         
@@ -68,8 +73,16 @@ class RackDeltaResolver():
         return True
 
     @property
-    def curr_tiles(self):
+    def current_rack(self):
         return self._curr_snapshot
+    
+    @property
+    def n_of_tiles(self):
+        return sum(self._curr_snapshot.values())
+    
+    @property
+    def confidence(self):
+        return self.confidence
 
     def _validate_drawing_delta(self, rack: Dict[str, int]):
         assert self._state == RackState.Drawing, f"Called {inspect.stack()[0][3]} in invalid state {self._state}"
@@ -81,7 +94,13 @@ class RackDeltaResolver():
         tiles_drawn = RackDeltaResolver._get_delta(rack, self._prev_snapshot)
 
         if not self._bag.is_feasible(tiles_drawn):
-            self._logger.warning(f'Ignoring rack drawing delta {tiles_drawn} as it is not feasible given tile bag')
+            self._logger.warning(f'Ignoring rack drawing delta {rack} as tiles drawn {tiles_drawn} are not feasible given tile bag')
+            return False
+        
+        expected_n = self._bag.get_expected_tiles_on_rack(self._prev_snapshot)
+        if (sum(self._curr_snapshot.values()) == expected_n
+                and sum(rack.values()) != expected_n):
+            self._logger.warning(f'Ignoring rack drawing delta {rack} as it does not contain the expected number of tile {expected_n}')
             return False
 
         return True
@@ -100,7 +119,7 @@ class RackDeltaResolver():
         """
         Returns true if current is a superset of previous
         """
-        for tile, count in previous:
+        for tile, count in previous.items():
             if tile not in current or count > current[tile]:
                 return False
             
@@ -122,7 +141,7 @@ class RackDeltaResolver():
 
         delta = {}
         for tile, count in superset.items():
-            if remaining := count - subset.get(tile, 0) > 0:
+            if (remaining := count - subset.get(tile, 0)) > 0:
                 delta[tile] = remaining
 
         return delta
