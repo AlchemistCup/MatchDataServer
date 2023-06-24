@@ -37,6 +37,7 @@ class HTTPServer:
             match_id = md.GameStateStore().generate_new_match_id()
             error = await self._sensor_server.assign_match(match_id, (p1, p2))
             if error is None:
+                self._player_name_to_match_id[(p1, p2)] = match_id
                 return HTTPServer._success({"match_id": match_id})
             else:
                 return HTTPServer._error(error)
